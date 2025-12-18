@@ -1,4 +1,8 @@
 export default function Login() {
+  const handleKakaoLogin = () => {
+    window.location.href = `${import.meta.env.VITE_API_BASE_URL}/auth/oauth/kakao`;
+  };
+
   return (
     <div className="min-h-screen flex items-center justify-center bg-gray-50">
       <div className="bg-white p-8 rounded-xl shadow-md w-full max-w-md">
@@ -30,6 +34,18 @@ export default function Login() {
             로그인
           </button>
         </form>
+
+        {/* ✅ 소셜 로그인 영역 */}
+        <div className="mt-6">
+          <button
+            type="button"
+            onClick={handleKakaoLogin}
+            className="w-full py-2 rounded-md bg-yellow-400 text-black font-semibold hover:bg-yellow-500"
+          >
+            카카오로 로그인
+          </button>
+        </div>
+
       </div>
     </div>
   );

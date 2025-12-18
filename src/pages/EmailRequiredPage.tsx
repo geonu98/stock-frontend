@@ -1,13 +1,17 @@
 import { useState } from "react";
+
 import { useSearchParams } from "react-router-dom";
+
 import api from "../api/axios";
 import { useAuthStore } from "../store/authStore";
 
 export default function EmailRequiredPage() {
   const [searchParams] = useSearchParams();
 
+
   const provider = searchParams.get("provider") ?? "kakao";
   const providerId = searchParams.get("providerId"); // 백엔드가 넘겨준다고 가정
+
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
@@ -36,6 +40,7 @@ export default function EmailRequiredPage() {
 
       window.location.href = "/verify-email-required";
     } catch (err) {
+
       setMsg("이메일 연결에 실패했습니다. 다시 시도해주세요.");
     } finally {
       setLoading(false);
@@ -46,9 +51,11 @@ export default function EmailRequiredPage() {
     <main style={{ padding: "2rem" }}>
       <h1>이메일이 필요합니다</h1>
       <p style={{ marginTop: "0.5rem" }}>
+
         소셜 계정에서 이메일 정보를 제공하지 않았습니다.
         <br />
         사용할 이메일을 입력해주세요.
+
       </p>
 
       <form onSubmit={submit} style={{ marginTop: "1rem" }}>
