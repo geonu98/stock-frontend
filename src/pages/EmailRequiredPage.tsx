@@ -1,63 +1,70 @@
 import { useState } from "react";
-
-import { useSearchParams } from "react-router-dom";
-
+import { useNavigate, useSearchParams } from "react-router-dom";
 import api from "../api/axios";
 import { useAuthStore } from "../store/authStore";
+import { getDeviceInfo } from "../utils/device";
 
 export default function EmailRequiredPage() {
   const [searchParams] = useSearchParams();
-
+  const navigate = useNavigate();
 
   const provider = searchParams.get("provider") ?? "kakao";
-  const providerId = searchParams.get("providerId"); // 백엔드가 넘겨준다고 가정
+  const providerId = searchParams.get("providerId");
 
   const [email, setEmail] = useState("");
   const [loading, setLoading] = useState(false);
   const [msg, setMsg] = useState<string | null>(null);
 
-  const setAccessToken = useAuthStore((s) => s.setAccessToken);
+  const setTokens = useAuthStore((s) => s.setTokens);
 
-  const submit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setMsg(null);
+const submit = async (e: React.FormEvent) => {
+  e.preventDefault();
+  setMsg(null);
 
-    if (!providerId) {
-      setMsg("providerId가 없습니다. 소셜 로그인을 다시 시도해주세요.");
-      return;
-    }
+  if (!providerId) {
+    setMsg("providerId가 없습니다. 소셜 로그인을 다시 시도해주세요.");
+    return;
+  }
 
-    setLoading(true);
-    try {
-      const res = await api.post("/auth/oauth/connect-email", {
-        provider,
-        providerId,
-        email,
-      });
-
-      const token = (res.data as any).accessToken;
-      setAccessToken(token);
-
-      window.location.href = "/verify-email-required";
-    } catch (err) {
-
-      setMsg("이메일 연결에 실패했습니다. 다시 시도해주세요.");
-    } finally {
-      setLoading(false);
-    }
+  const body = {
+    connectEmailRequest: {
+      provider,
+      providerId,
+      email,
+    },
+    deviceInfo: getDeviceInfo(),
   };
 
+  console.log("email =", email);
+  console.log("connect-email body =", body);
+
+  setLoading(true);
+  try {
+    await api.post("/auth/oauth/connect-email", body);
+
+    // ✅ connect-email은 토큰 발급 단계가 아님 → setTokens / navigate 하면 안됨
+    setMsg("인증 메일을 보냈습니다. 메일함에서 인증 링크를 클릭해주세요.");
+
+    // (선택) 입력 잠ह: 성공 후 입력/버튼 비활성화하고 싶으면 아래 주석 해제
+    // setEmail("");
+  } catch (err: any) {
+    setMsg(
+      err?.response?.data?.message ??
+        "이메일 연결에 실패했습니다. 다시 시도해주세요."
+    );
+  } finally {
+    setLoading(false);
+  }
+};
   return (
     <main style={{ padding: "2rem" }}>
       <h1>이메일이 필요합니다</h1>
       <p style={{ marginTop: "0.5rem" }}>
-
         소셜 계정에서 이메일 정보를 제공하지 않았습니다.
         <br />
         사용할 이메일을 입력해주세요.
-
       </p>
-
+       
       <form onSubmit={submit} style={{ marginTop: "1rem" }}>
         <input
           type="email"
@@ -77,7 +84,11 @@ export default function EmailRequiredPage() {
         </button>
       </form>
 
-      {msg && <p style={{ marginTop: "0.5rem", color: "red" }}>{msg}</p>}
+    {msg && (
+  <p style={{ marginTop: "0.5rem", color: msg.includes("보냈") ? "green" : "red" }}>
+    {msg}
+  </p>
+)}
     </main>
   );
 }
