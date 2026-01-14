@@ -11,11 +11,19 @@ const api = axios.create({
  * - Authorization 헤더를 붙이면 안 됨
  * - 401이 나도 refresh 로직을 타면 안 됨
  */
+const PUBLIC_AUTH_PATHS = [
+  "/auth/login",
+  "/auth/signup",
+  "/auth/refresh",
+  "/auth/oauth",
+  "/auth/email", // EmailVerificationController: /api/auth/email/verify, /api/auth/email/exchange (인증 이전 플로우)
+  "/auth/resend-verification-email",
+];
+
 const isPublicAuthRequest = (url?: string) => {
   if (!url) return false;
-  return url.startsWith("/auth/");
+  return PUBLIC_AUTH_PATHS.some((p) => url.startsWith(p));
 };
-
 // 요청 인터셉터
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const url = config.url ?? "";
