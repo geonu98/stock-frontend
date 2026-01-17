@@ -109,15 +109,7 @@ export default function Home() {
             </div>
           </div>
 
-          <div className="flex items-center gap-2">
-            {/* ✅ 이 버튼들은 지금은 UI용. 원하면 클릭 시 검색창 포커스/모달로 확장 가능 */}
-            <button className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
-              검색
-            </button>
-            <button className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-3 py-2 text-sm font-semibold text-gray-700 dark:text-gray-200">
-              알림
-            </button>
-          </div>
+         
         </header>
 
         {/* =======================
@@ -160,7 +152,7 @@ export default function Home() {
                 onClick={() => navigate("/login")}
                 className="shrink-0 rounded-2xl px-4 py-3 text-sm font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900"
               >
-                로그인
+                로그인 하고 내 자산 확인하기
               </button>
             </div>
           ) : (
