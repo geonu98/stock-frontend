@@ -3,11 +3,6 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { logout as logoutApi } from "../../api/auth";
 
-/*
-  공통 네비게이션 링크 컴포넌트
-  - 현재 pathname과 to가 같으면 active 스타일 적용
-  - 모바일 메뉴에서도 동일하게 재사용
-*/
 function NavLink({
   to,
   label,
@@ -25,7 +20,7 @@ function NavLink({
       to={to}
       onClick={onClick}
       className={[
-        "px-2 py-1 rounded-md text-sm",
+        "px-2 py-1.5 rounded-md text-sm font-semibold",
         active
           ? "text-gray-900 dark:text-white"
           : "text-gray-600 hover:text-gray-900 dark:text-gray-300 dark:hover:text-white",
@@ -40,19 +35,12 @@ function NavLink({
 export default function Header() {
   const navigate = useNavigate();
 
-  /*
-    UI 상태
-    - darkMode: 다크모드 on/off
-    - mobileOpen: 모바일 메뉴 열림/닫힘
-  */
   const [darkMode, setDarkMode] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
-  /*
-    인증 상태
-    - accessToken 존재 여부로 로그인 상태 판단
-    - user, fetchMe는 /api/user/me 기반으로 유저 정보(닉네임 등) 확보
-  */
+  // ✅ 토스형 검색: 헤더 입력값
+  const [query, setQuery] = useState("");
+
   const accessToken = useAuthStore((s) => s.accessToken);
   const user = useAuthStore((s) => s.user);
   const isMeLoading = useAuthStore((s) => s.isMeLoading);
@@ -60,52 +48,20 @@ export default function Header() {
 
   const isLoggedIn = !!accessToken;
 
-  /*
-    다크모드 적용
-    - Tailwind dark 모드 class 방식 사용
-    - documentElement에 "dark" 클래스를 토글
-  */
+  const isKakaoUser = useMemo(() => {
+    const p = (user?.provider ?? "").toLowerCase();
+    return isLoggedIn && p === "kakao";
+  }, [isLoggedIn, user]);
+
   useEffect(() => {
     if (darkMode) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
   }, [darkMode]);
 
-  /*
-    새로고침 대응
-    - 로컬스토리지에 토큰은 남아있지만 user 상태는 메모리에 없을 수 있음
-    - 토큰이 있고 user가 없으면 fetchMe() 호출해서 닉네임 등을 로드
-  */
   useEffect(() => {
     if (isLoggedIn && !user && !isMeLoading) fetchMe();
   }, [isLoggedIn, user, isMeLoading, fetchMe]);
 
-  /*
-    표시용 닉네임
-    - 로그인 상태에서만 의미 있음
-    - me 로딩 중이면 "로딩..."
-  */
-  const nickname = useMemo(() => {
-    if (!isLoggedIn) return "";
-    if (isMeLoading) return "로딩...";
-    return user?.nickname ?? "사용자";
-  }, [isLoggedIn, isMeLoading, user]);
-
-  /*
-    initial은 현재 데스크탑 아바타에 사용 중
-    - 닉네임/이메일의 첫 글자를 쓰는 방식
-    - 만약 "로" 같은 첫 글자 표시가 싫으면 아래 UI에서 {initial} 대신 👤로 바꾸면 됨
-  */
-  const initial = useMemo(() => {
-    const s = (user?.nickname ?? user?.email ?? "U").trim();
-    return s ? s[0].toUpperCase() : "U";
-  }, [user]);
-
-  /*
-    로그아웃 처리
-    - 백엔드 logout 호출
-    - 이후 홈으로 이동
-    - 모바일 메뉴는 닫아줌
-  */
   const handleLogout = async () => {
     try {
       await logoutApi();
@@ -115,161 +71,185 @@ export default function Header() {
     }
   };
 
+  const handleKakaoLogout = async () => {
+    try {
+      await logoutApi();
+    } finally {
+      setMobileOpen(false);
+      window.location.href = "/api/auth/oauth/kakao/logout";
+    }
+  };
+
+  const submitSearch = () => {
+    const s = query.trim().toUpperCase();
+    // 검색어 비어있으면 마켓으로만 이동
+    if (!s) {
+      navigate("/market");
+      setQuery("");   
+      setMobileOpen(false);
+      return;
+    }
+    navigate(`/market?symbol=${encodeURIComponent(s)}`);
+     setQuery(""); 
+    setMobileOpen(false);
+  };
+
   return (
     <header className="sticky top-0 z-[999] border-b bg-white/90 backdrop-blur dark:bg-gray-950/80 dark:border-gray-800">
       <div className="mx-auto max-w-7xl px-4 h-14 flex items-center justify-between">
-        {/* 로고 영역 */}
-        <Link
-          to="/"
-          onClick={() => setMobileOpen(false)}
-          className="font-semibold tracking-tight text-gray-900 dark:text-white"
-        >
-          Stock Dashboard
-        </Link>
-
-        {/* 데스크탑 네비게이션 */}
-        <nav className="hidden md:flex items-center gap-1">
-          <NavLink to="/" label="Home" />
-          <NavLink to="/market" label="Market" />
-          <NavLink to="/portfolio" label="Portfolio" />
-        </nav>
-
-        {/* 데스크탑 우측 영역: 테마 토글 + 인증 영역 */}
-        <div className="hidden md:flex items-center gap-2">
-          {/* 테마 토글 버튼 */}
-          <button
-            type="button"
-            onClick={() => setDarkMode((v) => !v)}
-            className="h-9 w-9 grid place-items-center rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
-            aria-label="Toggle theme"
-            title={darkMode ? "Dark" : "Light"}
+        {/* =======================
+            좌측: 로고 + 메뉴 (왼쪽 정렬)
+        ======================= */}
+        <div className="flex items-center gap-6">
+          <Link
+            to="/"
+            onClick={() => setMobileOpen(false)}
+            className="font-semibold tracking-tight text-gray-900 dark:text-white"
           >
-            <span className="text-sm">{darkMode ? "🌙" : "☀️"}</span>
-          </button>
+            Stock Dashboard
+          </Link>
 
-          {/* 비로그인 상태 */}
+          {/* 데스크탑 메뉴 */}
+          <nav className="hidden md:flex items-center gap-1">
+            <NavLink to="/" label="홈" />
+            <NavLink to="/market" label="마켓" />
+            <NavLink to="/portfolio" label="포트폴리오" />
+          </nav>
+        </div>
+
+        {/* =======================
+            우측: 검색 + 로그인/로그아웃 (토스 스타일)
+        ======================= */}
+        <div className="hidden md:flex items-center gap-2">
+          {/* 검색 입력 (작고 둥글게) */}
+          <div className="h-9 w-[260px] rounded-full border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-3 flex items-center gap-2">
+        
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitSearch();
+              }}
+              className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+              placeholder="종목을 검색해보세요"
+              inputMode="text"
+              autoCapitalize="characters"
+            />
+          </div>
+
+          {/* 버튼 영역 */}
           {!isLoggedIn ? (
-            <div className="flex items-center gap-2">
-              <Link
-                to="/login"
-                className="text-sm px-3 py-2 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 text-gray-700 dark:text-gray-200"
-              >
-                Login
-              </Link>
-              <Link
-                to="/signup"
-                className="text-sm px-4 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white"
-              >
-                Sign up
-              </Link>
-            </div>
+            <Link
+              to="/login"
+              className="h-9 px-4 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold grid place-items-center"
+            >
+              로그인
+            </Link>
           ) : (
-            /* 로그인 상태 */
             <div className="flex items-center gap-2">
-              {/* 닉네임 표시: 너무 길면 ... 처리 */}
-              <span
-                className="max-w-[180px] truncate text-sm text-gray-700 dark:text-gray-200"
-                title={nickname}
-              >
-                {nickname}
-              </span>
-
-              {/* 아바타 영역: initial(첫 글자) 표시 */}
-              <span className="h-8 w-8 rounded-full bg-gray-100 dark:bg-gray-800
-                 grid place-items-center text-xs font-medium
-                 text-gray-700 dark:text-gray-200 border border-gray-200 dark:border-gray-700">
-  {initial}
-</span>
-
-              {/* 로그아웃 버튼 */}
               <button
                 type="button"
                 onClick={handleLogout}
-                className="text-sm px-3 py-2 rounded-full border border-gray-200 hover:bg-gray-50 text-gray-800
-                           dark:border-gray-800 dark:hover:bg-gray-900 dark:text-gray-100"
+                className="h-9 px-4 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
               >
-                Logout
+                로그아웃
               </button>
+
+              {isKakaoUser && (
+                <button
+                  type="button"
+                  onClick={handleKakaoLogout}
+                  className="h-9 px-4 rounded-full border border-gray-200 hover:bg-gray-50 text-sm font-semibold
+                             text-gray-700 dark:text-gray-200 dark:border-gray-800 dark:hover:bg-gray-900"
+                  title="공용 PC라면 권장"
+                >
+                  카카오 로그아웃
+                </button>
+              )}
             </div>
           )}
         </div>
 
-        {/* 모바일 햄버거 버튼 */}
+        {/* 모바일 햄버거 */}
         <button
           onClick={() => setMobileOpen((v) => !v)}
           className="md:hidden h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 grid place-items-center"
-          aria-label="Open menu"
+          aria-label="메뉴 열기"
         >
           <span className="text-lg">{mobileOpen ? "✖" : "☰"}</span>
         </button>
       </div>
 
-      {/* 모바일 메뉴 영역 */}
+      {/* =======================
+          모바일 메뉴
+      ======================= */}
       {mobileOpen && (
-        <div className="md:hidden border-t dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-3">
-          <div className="flex items-center justify-between">
-            {/* 모바일 네비게이션 */}
-            <div className="flex gap-1">
-              <NavLink to="/" label="Home" onClick={() => setMobileOpen(false)} />
-              <NavLink to="/market" label="Market" onClick={() => setMobileOpen(false)} />
-              <NavLink to="/portfolio" label="Portfolio" onClick={() => setMobileOpen(false)} />
-            </div>
+        <div className="md:hidden border-t dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-3 space-y-3">
+          {/* 모바일 검색 */}
+          <div className="h-10 rounded-full border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-3 flex items-center gap-2">
+            <span className="text-gray-400 select-none">🔍</span>
+            <input
+              value={query}
+              onChange={(e) => setQuery(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter") submitSearch();
+              }}
+              className="w-full bg-transparent outline-none text-sm text-gray-900 dark:text-gray-100 placeholder:text-gray-400"
+              placeholder="종목을 검색해보세요"
+              inputMode="text"
+              autoCapitalize="characters"
+            />
+          </div>
 
-            {/* 모바일 테마 토글 */}
-            <button
-              type="button"
-              onClick={() => setDarkMode((v) => !v)}
-              className="h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 grid place-items-center"
-              aria-label="Toggle theme"
+          {/* 모바일 메뉴 */}
+          <div className="flex gap-1">
+            <NavLink to="/" label="홈" onClick={() => setMobileOpen(false)} />
+            <NavLink to="/market" label="마켓" onClick={() => setMobileOpen(false)} />
+            <NavLink
+              to="/portfolio"
+              label="포트폴리오"
+              onClick={() => setMobileOpen(false)}
+            />
+          </div>
+
+          {/* 모바일 로그인/로그아웃 */}
+          {!isLoggedIn ? (
+            <Link
+              to="/login"
+              onClick={() => setMobileOpen(false)}
+              className="w-full h-10 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold grid place-items-center"
             >
-              <span className="text-sm">{darkMode ? "🌙" : "☀️"}</span>
-            </button>
-          </div>
+              로그인
+            </Link>
+          ) : (
+            <div className="space-y-2">
+              <button
+                onClick={handleLogout}
+                className="w-full h-10 rounded-full bg-blue-600 hover:bg-blue-700 text-white text-sm font-semibold"
+              >
+                로그아웃
+              </button>
 
-          <div className="mt-3">
-            {/* 비로그인 상태 */}
-            {!isLoggedIn ? (
-              <div className="flex gap-2 w-full">
-                <Link
-                  to="/login"
-                  onClick={() => setMobileOpen(false)}
-                  className="flex-1 text-center text-sm px-3 py-2 rounded-full border dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900"
-                >
-                  Login
-                </Link>
-                <Link
-                  to="/signup"
-                  onClick={() => setMobileOpen(false)}
-                  className="flex-1 text-center text-sm px-3 py-2 rounded-full bg-blue-600 hover:bg-blue-700 text-white"
-                >
-                  Sign up
-                </Link>
-              </div>
-            ) : (
-              /* 로그인 상태 */
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-2 min-w-0">
-                  {/* 모바일 아바타는 아이콘 방식 */}
-                  <span className="h-8 w-8 rounded-full bg-gray-200 dark:bg-gray-700 grid place-items-center text-sm font-semibold">
-                    👤
-                  </span>
-
-                  {/* 닉네임 표시 */}
-                  <span className="min-w-0 truncate text-sm text-gray-700 dark:text-gray-200">
-                    {nickname}
-                  </span>
-                </div>
-
-                {/* 모바일 로그아웃 */}
+              {isKakaoUser && (
                 <button
-                  onClick={handleLogout}
-                  className="text-sm px-3 py-2 rounded-full border dark:border-gray-800 hover:bg-gray-50 dark:hover:bg-gray-900 text-red-600 dark:text-red-400"
+                  onClick={handleKakaoLogout}
+                  className="w-full h-10 rounded-full border border-gray-200 hover:bg-gray-50 text-sm font-semibold
+                             text-gray-700 dark:text-gray-200 dark:border-gray-800 dark:hover:bg-gray-900"
                 >
-                  Logout
+                  카카오 로그아웃
                 </button>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
+
+          {/* (선택) 모바일에서 검색 버튼 없애고 엔터로만 검색해도 됨 */}
+          <button
+            onClick={submitSearch}
+            className="w-full h-10 rounded-full border border-gray-200 hover:bg-gray-50 text-sm font-semibold
+                       dark:border-gray-800 dark:hover:bg-gray-900"
+          >
+            검색
+          </button>
         </div>
       )}
     </header>

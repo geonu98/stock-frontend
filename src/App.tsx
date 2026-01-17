@@ -3,14 +3,12 @@ import Header from "./components/layout/Header";
 import Login from "./pages/Login";
 import Home from "./pages/Home";
 import OAuthCallback from "./pages/OAuthCallback";
-
-
+import LogoutComplete from "./pages/LogoutComplete";
 import VerifyEmailRequiredPage from "./pages/VerifyEmailRequiredPage";
-
 import EmailRequiredPage from "./pages/EmailRequiredPage";
-
 import EmailVerifiedPage from "./pages/EmailVerifiedPage";
 import Signup from "./pages/Signup";
+import Market from "./pages/Market";
 
 
 function App() {
@@ -31,7 +29,8 @@ function App() {
         <Route path="/oauth/callback" element={<OAuthCallback />} />
         <Route path="/email-verified" element={<EmailVerifiedPage />} />
         <Route path="/signup" element={<Signup />} />
-
+        <Route path="/logout-complete" element={<LogoutComplete />} />
+        <Route path="/market" element={<Market/>} />
 
       </Routes>
     </BrowserRouter>

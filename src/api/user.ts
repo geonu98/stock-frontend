@@ -5,7 +5,7 @@ export type UserProfileResponse = {
   email: string;
   nickname: string;
   name?: string | null;
-  // 네 백엔드 UserProfileResponse 필드에 맞춰 필요하면 추가
+  provider?: string;
 };
 
 export async function getMe() {

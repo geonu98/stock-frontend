@@ -18,6 +18,7 @@ const PUBLIC_AUTH_PATHS = [
   "/auth/oauth",
   "/auth/email", // EmailVerificationController: /api/auth/email/verify, /api/auth/email/exchange (인증 이전 플로우)
   "/auth/resend-verification-email",
+  "/home",
 ];
 
 const isPublicAuthRequest = (url?: string) => {
