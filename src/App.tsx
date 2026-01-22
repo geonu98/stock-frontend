@@ -11,6 +11,7 @@ import Signup from "./pages/Signup";
 import Market from "./pages/Market";
 
 
+
 function App() {
   return (
     <BrowserRouter>
@@ -31,6 +32,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/logout-complete" element={<LogoutComplete />} />
         <Route path="/market" element={<Market/>} />
+
 
       </Routes>
     </BrowserRouter>
