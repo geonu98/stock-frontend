@@ -1,9 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { fetchHome, type HomeResponse } from "../api/home";
+import {
+  fetchHome,
+  type HomeResponse,
+  fetchRecommendations,
+  type RecommendationsResponse,
+} from "../api/home";
 import MiniSparkline from "../components/./market/MiniSparkline";
-
 
 /**
  * ✅ 숫자 포맷 유틸
@@ -11,7 +15,9 @@ import MiniSparkline from "../components/./market/MiniSparkline";
  * - 퍼센트: +1.23 / -1.23 형태
  */
 function fmtNumber(v: number, digits = 2) {
-  return Number.isFinite(v) ? v.toLocaleString(undefined, { maximumFractionDigits: digits }) : "-";
+  return Number.isFinite(v)
+    ? v.toLocaleString(undefined, { maximumFractionDigits: digits })
+    : "-";
 }
 function fmtSigned(v: number, digits = 2) {
   if (!Number.isFinite(v)) return "-";
@@ -68,6 +74,13 @@ export default function Home() {
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
 
+  // =======================
+  // ✅ 추천(에디터 픽 밑에 추가할 데이터)
+  // =======================
+  const [reco, setReco] = useState<RecommendationsResponse | null>(null);
+  const [recoLoading, setRecoLoading] = useState(false);
+  const [recoError, setRecoError] = useState<string | null>(null);
+
   useEffect(() => {
     const run = async () => {
       setHomeLoading(true);
@@ -85,13 +98,34 @@ export default function Home() {
     run();
   }, []);
 
+  // ✅ 추천 데이터도 별도로 호출 (HomeResponse와 분리)
+  useEffect(() => {
+    const run = async () => {
+      setRecoLoading(true);
+      setRecoError(null);
+      try {
+        const data = await fetchRecommendations(0);
+        setReco(data);
+      } catch (e: any) {
+        setRecoError(e?.message ?? "추천 종목을 불러오지 못했습니다.");
+      } finally {
+        setRecoLoading(false);
+      }
+    };
+    run();
+  }, []);
+
   // =======================
   // ✅ 렌더링용 데이터 가공
-  // - "오늘 많이 본 종목" 카드에 tickers 사용
+  // - "에디터 픽" 카드에 tickers 사용
+  // - "추천 종목" 카드에 recommendations 사용
   // - "주요 뉴스" 리스트에 news 사용
   // =======================
   const tickers = useMemo(() => home?.tickers ?? [], [home]);
   const news = useMemo(() => home?.news ?? [], [home]);
+
+  // ✅ 추천 아이템 리스트
+  const recommendations = useMemo(() => reco?.items ?? [], [reco]);
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 dark:bg-gray-950">
@@ -108,8 +142,6 @@ export default function Home() {
               시장 한눈에 보기
             </div>
           </div>
-
-         
         </header>
 
         {/* =======================
@@ -256,12 +288,12 @@ export default function Home() {
         </section>
 
         {/* =======================
-            ✅ 오늘 많이 본 종목 (home.tickers 연동)
+            ✅ 에디터 픽 (home.tickers 연동)
         ======================= */}
         <section className="space-y-3">
           <div className="flex items-end justify-between">
             <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              오늘 많이 본 종목
+              에디터 픽
             </div>
             <button
               className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:underline"
@@ -338,18 +370,120 @@ export default function Home() {
                         {fmtNumber(t.price)}
                       </div>
                     </div>
-<div className="mt-3 flex items-end justify-between gap-3">
-  <div className="text-xs text-gray-500 dark:text-gray-400">
-    변동: {fmtSigned(t.change)} ({fmtSignedPercent(t.changePercent)})
-  </div>
 
-  <MiniSparkline
-    values={t.sparkline ?? []}
-    width={150}
-    height={46}
-    className="shrink-0"
-  />
-</div>
+                    <div className="mt-3 flex items-end justify-between gap-3">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        변동: {fmtSigned(t.change)} ({fmtSignedPercent(t.changePercent)})
+                      </div>
+
+                      <MiniSparkline
+                        values={t.sparkline ?? []}
+                        width={150}
+                        height={46}
+                        className="shrink-0"
+                      />
+                    </div>
+                  </button>
+                );
+              })}
+          </div>
+        </section>
+
+        {/* =======================
+            ✅ 추천 종목 (HomeRecommendationService 연동)
+            - 에디터 픽 밑에 "추가"되는 섹션
+            - sparkline이 SparklinePoint[] 라서 close[]로 변환해서 MiniSparkline에 넣음
+        ======================= */}
+        <section className="space-y-3">
+          <div className="flex items-end justify-between">
+            <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
+              추천 종목
+            </div>
+          </div>
+
+          {/* ✅ 추천 로딩/에러 표시 (홈 배너랑 분리) */}
+          {(recoLoading || recoError) && (
+            <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
+              {recoLoading && (
+                <div className="text-sm text-gray-600 dark:text-gray-300">
+                  추천 종목을 불러오는 중입니다...
+                </div>
+              )}
+              {!recoLoading && recoError && (
+                <div className="text-sm text-rose-600 dark:text-rose-300">
+                  {recoError}
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="flex gap-3 overflow-x-auto pb-2">
+            {!recoLoading && recommendations.length === 0 && !recoError && (
+              <div className="text-sm text-gray-500 dark:text-gray-400 px-1">
+                표시할 추천 종목이 없습니다.
+              </div>
+            )}
+
+            {!recoLoading &&
+              recommendations.map((r) => {
+                const changeRate = Number(r.changeRate ?? 0);
+                const up = changeRate >= 0;
+                const badgeClass = up
+                  ? "text-rose-600 dark:text-rose-300"
+                  : "text-blue-600 dark:text-blue-300";
+
+                // ✅ SparklinePoint[] -> number[]
+                const sparkValues = (r.sparkline ?? []).map((p) => p.close);
+
+                return (
+                  <button
+                    key={r.symbol}
+                    className="min-w-[260px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5 text-left hover:bg-gray-50 dark:hover:bg-gray-800"
+                    onClick={() =>
+                      navigate(`/market?symbol=${encodeURIComponent(r.symbol)}`)
+                    }
+                  >
+                    <div className="flex items-start justify-between">
+                      <div>
+                        <div className="font-semibold text-gray-900 dark:text-gray-100">
+                          {r.symbol}
+                        </div>
+                        <div className="text-sm text-gray-500 dark:text-gray-400">
+                          추천
+                        </div>
+                      </div>
+
+                      <div className="text-right">
+                        <div className={`font-semibold ${badgeClass}`}>
+                          {fmtSignedPercent(changeRate)}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {up ? "상승" : "하락"}
+                        </div>
+                      </div>
+                    </div>
+
+                    <div className="mt-4 flex items-end justify-between">
+                      <div className="text-sm text-gray-500 dark:text-gray-400">
+                        현재가
+                      </div>
+                      <div className="text-lg font-bold text-gray-900 dark:text-gray-100">
+                        {fmtNumber(Number(r.price ?? NaN))}
+                      </div>
+                    </div>
+
+                    <div className="mt-3 flex items-end justify-between gap-3">
+                      <div className="text-xs text-gray-500 dark:text-gray-400">
+                        변동: {fmtSignedPercent(changeRate)}
+                      </div>
+
+                  <MiniSparkline
+  values={r.values ?? r.sparkline?.map((p) => p.close) ?? []}
+  width={150}
+  height={46}
+  className="shrink-0"
+/>
+                    </div>
                   </button>
                 );
               })}
@@ -400,7 +534,8 @@ export default function Home() {
                     className="w-full text-left px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-800"
                     onClick={() => {
                       // ✅ 외부 링크 열기
-                      if (n.url) window.open(n.url, "_blank", "noopener,noreferrer");
+                      if (n.url)
+                        window.open(n.url, "_blank", "noopener,noreferrer");
                     }}
                     title="새 탭에서 열기"
                   >
