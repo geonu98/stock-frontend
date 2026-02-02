@@ -8,9 +8,10 @@ import {
   type RecommendationsResponse,
 } from "../api/home";
 import MiniSparkline from "../components/./market/MiniSparkline";
+import { safeSparkline } from "../utils/sparklineFallback";
 
 /**
- * ✅ 숫자 포맷 유틸
+ * 숫자 포맷 유틸
  * - 가격: 1,234.56 형태
  * - 퍼센트: +1.23 / -1.23 형태
  */
@@ -31,7 +32,7 @@ function fmtSignedPercent(v: number, digits = 2) {
 }
 
 /**
- * ✅ Finnhub datetime(초/밀리초) 섞여도 안전하게 "몇 시간 전" 표시
+ * Finnhub datetime(초/밀리초) 섞여도 안전하게 "몇 시간 전" 표시
  */
 function timeAgo(datetime: number) {
   if (!datetime) return "";
@@ -54,7 +55,7 @@ export default function Home() {
   const navigate = useNavigate();
 
   // =======================
-  // ✅ 로그인 상태(기존 로직 유지)
+  // 로그인 상태(기존 로직 유지)
   // =======================
   const accessToken = useAuthStore((s) => s.accessToken);
   const user = useAuthStore((s) => s.user);
@@ -68,14 +69,14 @@ export default function Home() {
   }, [isLoggedIn, user, isMeLoading, fetchMe]);
 
   // =======================
-  // ✅ 홈 데이터 상태
+  // 홈 데이터 상태
   // =======================
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
 
   // =======================
-  // ✅ 추천(에디터 픽 밑에 추가할 데이터)
+  // 추천(에디터 픽 밑에 추가할 데이터)
   // =======================
   const [reco, setReco] = useState<RecommendationsResponse | null>(null);
   const [recoLoading, setRecoLoading] = useState(false);
@@ -87,7 +88,6 @@ export default function Home() {
       setHomeError(null);
       try {
         const data = await fetchHome();
-        // console.log("home data:", data); // ✅ 확인 끝났으면 지워도 됨
         setHome(data);
       } catch (e: any) {
         setHomeError(e?.message ?? "홈 데이터를 불러오지 못했습니다.");
@@ -98,7 +98,7 @@ export default function Home() {
     run();
   }, []);
 
-  // ✅ 추천 데이터도 별도로 호출 (HomeResponse와 분리)
+  // 추천 데이터도 별도로 호출 (HomeResponse와 분리)
   useEffect(() => {
     const run = async () => {
       setRecoLoading(true);
@@ -116,7 +116,7 @@ export default function Home() {
   }, []);
 
   // =======================
-  // ✅ 렌더링용 데이터 가공
+  // 렌더링용 데이터 가공
   // - "에디터 픽" 카드에 tickers 사용
   // - "추천 종목" 카드에 recommendations 사용
   // - "주요 뉴스" 리스트에 news 사용
@@ -124,7 +124,7 @@ export default function Home() {
   const tickers = useMemo(() => home?.tickers ?? [], [home]);
   const news = useMemo(() => home?.news ?? [], [home]);
 
-  // ✅ 추천 아이템 리스트
+  // 추천 아이템 리스트
   const recommendations = useMemo(() => reco?.items ?? [], [reco]);
 
   return (
@@ -145,7 +145,7 @@ export default function Home() {
         </header>
 
         {/* =======================
-            ✅ 홈 데이터 로딩/에러 표시(간단 배너)
+            홈 데이터 로딩/에러 표시(간단 배너)
         ======================= */}
         {(homeLoading || homeError) && (
           <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
@@ -203,7 +203,6 @@ export default function Home() {
                 오늘도 좋은 투자 되세요.
               </div>
 
-              {/* ✅ 포트폴리오 요약은 나중에 실제 API 붙일 자리 */}
               <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
                 <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
                   <div className="text-xs text-gray-500 dark:text-gray-400">
@@ -236,7 +235,6 @@ export default function Home() {
 
         {/* =======================
             시장 요약 (가로 스크롤)
-            - 여기 indices를 나중에 진짜로 채우면 교체
         ======================= */}
         <section className="space-y-3">
           <div className="flex items-end justify-between">
@@ -288,7 +286,7 @@ export default function Home() {
         </section>
 
         {/* =======================
-            ✅ 에디터 픽 (home.tickers 연동)
+            에디터 픽 (home.tickers 연동)
         ======================= */}
         <section className="space-y-3">
           <div className="flex items-end justify-between">
@@ -304,7 +302,6 @@ export default function Home() {
           </div>
 
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {/* ✅ 로딩 중 스켈레톤(간단 버전) */}
             {homeLoading && (
               <>
                 <div className="min-w-[260px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
@@ -320,7 +317,6 @@ export default function Home() {
               </>
             )}
 
-            {/* ✅ 실제 데이터 렌더 */}
             {!homeLoading && tickers.length === 0 && (
               <div className="text-sm text-gray-500 dark:text-gray-400 px-1">
                 표시할 종목이 없습니다.
@@ -373,11 +369,12 @@ export default function Home() {
 
                     <div className="mt-3 flex items-end justify-between gap-3">
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        변동: {fmtSigned(t.change)} ({fmtSignedPercent(t.changePercent)})
+                        변동: {fmtSigned(t.change)} (
+                        {fmtSignedPercent(t.changePercent)})
                       </div>
 
                       <MiniSparkline
-                        values={t.sparkline ?? []}
+                        values={safeSparkline(t.sparkline ?? [], 30)}
                         width={150}
                         height={46}
                         className="shrink-0"
@@ -390,7 +387,7 @@ export default function Home() {
         </section>
 
         {/* =======================
-            ✅ 추천 종목 (HomeRecommendationService 연동)
+            추천 종목 (HomeRecommendationService 연동)
             - 에디터 픽 밑에 "추가"되는 섹션
             - sparkline이 SparklinePoint[] 라서 close[]로 변환해서 MiniSparkline에 넣음
         ======================= */}
@@ -401,7 +398,6 @@ export default function Home() {
             </div>
           </div>
 
-          {/* ✅ 추천 로딩/에러 표시 (홈 배너랑 분리) */}
           {(recoLoading || recoError) && (
             <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
               {recoLoading && (
@@ -432,8 +428,10 @@ export default function Home() {
                   ? "text-rose-600 dark:text-rose-300"
                   : "text-blue-600 dark:text-blue-300";
 
-                // ✅ SparklinePoint[] -> number[]
-                const sparkValues = (r.sparkline ?? []).map((p) => p.close);
+                const sparkValues = safeSparkline(
+                  (r.sparkline ?? []).map((p) => p.close),
+                  30
+                );
 
                 return (
                   <button
@@ -477,12 +475,12 @@ export default function Home() {
                         변동: {fmtSignedPercent(changeRate)}
                       </div>
 
-                  <MiniSparkline
-  values={r.values ?? r.sparkline?.map((p) => p.close) ?? []}
-  width={150}
-  height={46}
-  className="shrink-0"
-/>
+                      <MiniSparkline
+                        values={sparkValues}
+                        width={150}
+                        height={46}
+                        className="shrink-0"
+                      />
                     </div>
                   </button>
                 );
@@ -491,7 +489,7 @@ export default function Home() {
         </section>
 
         {/* =======================
-            ✅ 주요 뉴스 (home.news 연동)
+            주요 뉴스 (home.news 연동)
         ======================= */}
         <section className="space-y-3 pb-10">
           <div className="flex items-end justify-between">
@@ -505,7 +503,6 @@ export default function Home() {
 
           <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {/* ✅ 로딩 상태 */}
               {homeLoading && (
                 <>
                   <div className="px-5 py-4">
@@ -519,21 +516,18 @@ export default function Home() {
                 </>
               )}
 
-              {/* ✅ 데이터 없음 */}
               {!homeLoading && news.length === 0 && (
                 <div className="px-5 py-4 text-sm text-gray-500 dark:text-gray-400">
                   표시할 뉴스가 없습니다.
                 </div>
               )}
 
-              {/* ✅ 실제 데이터 */}
               {!homeLoading &&
                 news.map((n, idx) => (
                   <button
                     key={`${n.url}-${idx}`}
                     className="w-full text-left px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-800"
                     onClick={() => {
-                      // ✅ 외부 링크 열기
                       if (n.url)
                         window.open(n.url, "_blank", "noopener,noreferrer");
                     }}
@@ -548,7 +542,6 @@ export default function Home() {
                       {n.source ? ` · ${n.source}` : ""}
                     </div>
 
-                    {/* ✅ 요약이 있으면 1줄만 보여주기 */}
                     {n.summary && (
                       <div className="mt-2 text-sm text-gray-600 dark:text-gray-300 line-clamp-2">
                         {n.summary}

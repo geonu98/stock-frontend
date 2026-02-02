@@ -9,7 +9,7 @@ import EmailRequiredPage from "./pages/EmailRequiredPage";
 import EmailVerifiedPage from "./pages/EmailVerifiedPage";
 import Signup from "./pages/Signup";
 import Market from "./pages/Market";
-
+import RecommendationsPage from "./pages/RecommendationsPage";
 
 
 function App() {
@@ -32,6 +32,7 @@ function App() {
         <Route path="/signup" element={<Signup />} />
         <Route path="/logout-complete" element={<LogoutComplete />} />
         <Route path="/market" element={<Market/>} />
+        <Route path="/recommendations" element={<RecommendationsPage />} />
 
 
       </Routes>
