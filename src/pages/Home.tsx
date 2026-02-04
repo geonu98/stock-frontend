@@ -1,20 +1,10 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import {
-  fetchHome,
-  type HomeResponse,
-  fetchRecommendations,
-  type RecommendationsResponse,
-} from "../api/home";
+import { fetchHome, type HomeResponse, type RecommendedItem } from "../api/home";
 import MiniSparkline from "../components/./market/MiniSparkline";
 import { safeSparkline } from "../utils/sparklineFallback";
 
-/**
- * 숫자 포맷 유틸
- * - 가격: 1,234.56 형태
- * - 퍼센트: +1.23 / -1.23 형태
- */
 function fmtNumber(v: number, digits = 2) {
   return Number.isFinite(v)
     ? v.toLocaleString(undefined, { maximumFractionDigits: digits })
@@ -31,12 +21,9 @@ function fmtSignedPercent(v: number, digits = 2) {
   return `${s}${v.toFixed(digits)}%`;
 }
 
-/**
- * Finnhub datetime(초/밀리초) 섞여도 안전하게 "몇 시간 전" 표시
- */
 function timeAgo(datetime: number) {
   if (!datetime) return "";
-  const ms = datetime < 1e12 ? datetime * 1000 : datetime; // sec -> ms
+  const ms = datetime < 1e12 ? datetime * 1000 : datetime;
   const diff = Date.now() - ms;
   if (diff < 0) return "방금 전";
 
@@ -54,9 +41,6 @@ function timeAgo(datetime: number) {
 export default function Home() {
   const navigate = useNavigate();
 
-  // =======================
-  // 로그인 상태(기존 로직 유지)
-  // =======================
   const accessToken = useAuthStore((s) => s.accessToken);
   const user = useAuthStore((s) => s.user);
   const isMeLoading = useAuthStore((s) => s.isMeLoading);
@@ -68,19 +52,9 @@ export default function Home() {
     if (isLoggedIn && !user && !isMeLoading) fetchMe();
   }, [isLoggedIn, user, isMeLoading, fetchMe]);
 
-  // =======================
-  // 홈 데이터 상태
-  // =======================
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
-
-  // =======================
-  // 추천(에디터 픽 밑에 추가할 데이터)
-  // =======================
-  const [reco, setReco] = useState<RecommendationsResponse | null>(null);
-  const [recoLoading, setRecoLoading] = useState(false);
-  const [recoError, setRecoError] = useState<string | null>(null);
 
   useEffect(() => {
     const run = async () => {
@@ -98,41 +72,28 @@ export default function Home() {
     run();
   }, []);
 
-  // 추천 데이터도 별도로 호출 (HomeResponse와 분리)
-  useEffect(() => {
-    const run = async () => {
-      setRecoLoading(true);
-      setRecoError(null);
-      try {
-        const data = await fetchRecommendations(0);
-        setReco(data);
-      } catch (e: any) {
-        setRecoError(e?.message ?? "추천 종목을 불러오지 못했습니다.");
-      } finally {
-        setRecoLoading(false);
-      }
-    };
-    run();
-  }, []);
-
-  // =======================
-  // 렌더링용 데이터 가공
-  // - "에디터 픽" 카드에 tickers 사용
-  // - "추천 종목" 카드에 recommendations 사용
-  // - "주요 뉴스" 리스트에 news 사용
-  // =======================
   const tickers = useMemo(() => home?.tickers ?? [], [home]);
   const news = useMemo(() => home?.news ?? [], [home]);
 
-  // 추천 아이템 리스트
-  const recommendations = useMemo(() => reco?.items ?? [], [reco]);
+  // 홈 추천(5개)
+  const recommendations: RecommendedItem[] = useMemo(
+    () => home?.recommendations?.items ?? [],
+    [home]
+  );
+
+  const recoNextOffset = useMemo(
+    () => home?.recommendations?.nextOffset ?? null,
+    [home]
+  );
+
+  const recoStatus = home?.recommendationStatus;
+  const recoBuilding = recoStatus === "BUILDING";
+
+  const recoVersion = home?.recommendationVersion ?? null;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 dark:bg-gray-950">
       <div className="mx-auto w-full max-w-5xl px-5 py-8 space-y-8">
-        {/* =======================
-            상단 헤더 (토스 느낌)
-        ======================= */}
         <header className="flex items-start justify-between">
           <div className="space-y-1">
             <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
@@ -144,9 +105,6 @@ export default function Home() {
           </div>
         </header>
 
-        {/* =======================
-            홈 데이터 로딩/에러 표시(간단 배너)
-        ======================= */}
         {(homeLoading || homeError) && (
           <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
             {homeLoading && (
@@ -162,9 +120,6 @@ export default function Home() {
           </div>
         )}
 
-        {/* =======================
-            로그인/자산 요약 카드
-        ======================= */}
         <section className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
           {!isLoggedIn ? (
             <div className="flex items-start justify-between gap-4">
@@ -202,92 +157,10 @@ export default function Home() {
               <div className="text-sm text-gray-500 dark:text-gray-400">
                 오늘도 좋은 투자 되세요.
               </div>
-
-              <div className="mt-4 grid grid-cols-1 md:grid-cols-3 gap-3">
-                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    총 자산
-                  </div>
-                  <div className="mt-1 text-lg font-bold text-gray-900 dark:text-gray-100">
-                    준비 중
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    오늘 수익률
-                  </div>
-                  <div className="mt-1 text-lg font-bold text-gray-900 dark:text-gray-100">
-                    준비 중
-                  </div>
-                </div>
-                <div className="rounded-2xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-4">
-                  <div className="text-xs text-gray-500 dark:text-gray-400">
-                    보유 종목
-                  </div>
-                  <div className="mt-1 text-lg font-bold text-gray-900 dark:text-gray-100">
-                    준비 중
-                  </div>
-                </div>
-              </div>
             </div>
           )}
         </section>
 
-        {/* =======================
-            시장 요약 (가로 스크롤)
-        ======================= */}
-        <section className="space-y-3">
-          <div className="flex items-end justify-between">
-            <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
-              시장 요약
-            </div>
-            <div className="text-xs text-gray-500 dark:text-gray-400">
-              실시간 반영 예정
-            </div>
-          </div>
-
-          <div className="flex gap-3 overflow-x-auto pb-2">
-            <div className="min-w-[220px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                코스피
-              </div>
-              <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
-                2,650.12
-              </div>
-              <div className="mt-1 inline-flex rounded-full border px-2.5 py-1 text-sm font-semibold bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-200 dark:border-rose-900">
-                +12.35 (0.55%)
-              </div>
-            </div>
-
-            <div className="min-w-[220px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                코스닥
-              </div>
-              <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
-                860.45
-              </div>
-              <div className="mt-1 inline-flex rounded-full border px-2.5 py-1 text-sm font-semibold bg-blue-50 text-blue-700 border-blue-200 dark:bg-blue-950 dark:text-blue-200 dark:border-blue-900">
-                -4.21 (-0.32%)
-              </div>
-            </div>
-
-            <div className="min-w-[220px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                달러/원 환율
-              </div>
-              <div className="mt-2 text-2xl font-bold text-gray-900 dark:text-gray-100">
-                1,345.20
-              </div>
-              <div className="mt-1 inline-flex rounded-full border px-2.5 py-1 text-sm font-semibold bg-rose-50 text-rose-700 border-rose-200 dark:bg-rose-950 dark:text-rose-200 dark:border-rose-900">
-                +8.20
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* =======================
-            에디터 픽 (home.tickers 연동)
-        ======================= */}
         <section className="space-y-3">
           <div className="flex items-end justify-between">
             <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
@@ -302,21 +175,6 @@ export default function Home() {
           </div>
 
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {homeLoading && (
-              <>
-                <div className="min-w-[260px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-                  <div className="h-4 w-24 bg-gray-200 dark:bg-gray-800 rounded" />
-                  <div className="mt-2 h-3 w-32 bg-gray-200 dark:bg-gray-800 rounded" />
-                  <div className="mt-6 h-3 w-40 bg-gray-200 dark:bg-gray-800 rounded" />
-                </div>
-                <div className="min-w-[260px] rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-5">
-                  <div className="h-4 w-24 bg-gray-200 dark:bg-gray-800 rounded" />
-                  <div className="mt-2 h-3 w-32 bg-gray-200 dark:bg-gray-800 rounded" />
-                  <div className="mt-6 h-3 w-40 bg-gray-200 dark:bg-gray-800 rounded" />
-                </div>
-              </>
-            )}
-
             {!homeLoading && tickers.length === 0 && (
               <div className="text-sm text-gray-500 dark:text-gray-400 px-1">
                 표시할 종목이 없습니다.
@@ -369,8 +227,7 @@ export default function Home() {
 
                     <div className="mt-3 flex items-end justify-between gap-3">
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        변동: {fmtSigned(t.change)} (
-                        {fmtSignedPercent(t.changePercent)})
+                        변동: {fmtSigned(t.change)} ({fmtSignedPercent(t.changePercent)})
                       </div>
 
                       <MiniSparkline
@@ -386,41 +243,39 @@ export default function Home() {
           </div>
         </section>
 
-        {/* =======================
-            추천 종목 (HomeRecommendationService 연동)
-            - 에디터 픽 밑에 "추가"되는 섹션
-            - sparkline이 SparklinePoint[] 라서 close[]로 변환해서 MiniSparkline에 넣음
-        ======================= */}
         <section className="space-y-3">
           <div className="flex items-end justify-between">
             <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
               추천 종목
             </div>
+
+            <button
+              className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:underline"
+              onClick={() => {
+                const qs = recoVersion ? `?v=${encodeURIComponent(recoVersion)}` : "";
+                navigate(`/recommendations${qs}`);
+              }}
+            >
+              더 보기
+            </button>
           </div>
 
-          {(recoLoading || recoError) && (
+          {recoBuilding && (
             <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
-              {recoLoading && (
-                <div className="text-sm text-gray-600 dark:text-gray-300">
-                  추천 종목을 불러오는 중입니다...
-                </div>
-              )}
-              {!recoLoading && recoError && (
-                <div className="text-sm text-rose-600 dark:text-rose-300">
-                  {recoError}
-                </div>
-              )}
+              <div className="text-sm text-gray-600 dark:text-gray-300">
+                추천 종목을 생성 중입니다. 잠시 후 다시 확인해 주세요.
+              </div>
             </div>
           )}
 
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {!recoLoading && recommendations.length === 0 && !recoError && (
+            {!homeLoading && recommendations.length === 0 && (
               <div className="text-sm text-gray-500 dark:text-gray-400 px-1">
                 표시할 추천 종목이 없습니다.
               </div>
             )}
 
-            {!recoLoading &&
+            {!homeLoading &&
               recommendations.map((r) => {
                 const changeRate = Number(r.changeRate ?? 0);
                 const up = changeRate >= 0;
@@ -429,7 +284,8 @@ export default function Home() {
                   : "text-blue-600 dark:text-blue-300";
 
                 const sparkValues = safeSparkline(
-                  (r.sparkline ?? []).map((p) => p.close),
+                  (r.values ??
+                    (r.sparkline ?? []).map((p) => p.close)) as number[],
                   30
                 );
 
@@ -486,36 +342,23 @@ export default function Home() {
                 );
               })}
           </div>
+
+          {!homeLoading && recoNextOffset == null && (
+            <div className="text-xs text-gray-500 dark:text-gray-400">
+              더 이상 표시할 추천이 없습니다.
+            </div>
+          )}
         </section>
 
-        {/* =======================
-            주요 뉴스 (home.news 연동)
-        ======================= */}
         <section className="space-y-3 pb-10">
           <div className="flex items-end justify-between">
             <div className="text-base font-semibold text-gray-900 dark:text-gray-100">
               주요 뉴스
             </div>
-            <button className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:underline">
-              더 보기
-            </button>
           </div>
 
           <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 overflow-hidden">
             <div className="divide-y divide-gray-100 dark:divide-gray-800">
-              {homeLoading && (
-                <>
-                  <div className="px-5 py-4">
-                    <div className="h-4 w-3/4 bg-gray-200 dark:bg-gray-800 rounded" />
-                    <div className="mt-2 h-3 w-1/3 bg-gray-200 dark:bg-gray-800 rounded" />
-                  </div>
-                  <div className="px-5 py-4">
-                    <div className="h-4 w-2/3 bg-gray-200 dark:bg-gray-800 rounded" />
-                    <div className="mt-2 h-3 w-1/4 bg-gray-200 dark:bg-gray-800 rounded" />
-                  </div>
-                </>
-              )}
-
               {!homeLoading && news.length === 0 && (
                 <div className="px-5 py-4 text-sm text-gray-500 dark:text-gray-400">
                   표시할 뉴스가 없습니다.
@@ -528,8 +371,7 @@ export default function Home() {
                     key={`${n.url}-${idx}`}
                     className="w-full text-left px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-800"
                     onClick={() => {
-                      if (n.url)
-                        window.open(n.url, "_blank", "noopener,noreferrer");
+                      if (n.url) window.open(n.url, "_blank", "noopener,noreferrer");
                     }}
                     title="새 탭에서 열기"
                   >

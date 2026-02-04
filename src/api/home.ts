@@ -18,11 +18,35 @@ export type HomeTicker = {
   sparkline?: number[];
 };
 
+export type SparklinePoint = {
+  index: number;
+  close: number;
+};
+
+export type RecommendedItem = {
+  symbol: string;
+  price: number | null;
+  changeRate: number | null;
+  sparkline: SparklinePoint[];
+  values?: number[];
+};
+
+export type RecommendationsResponse = {
+  items: RecommendedItem[];
+  nextOffset: number | null;
+};
+
 export type HomeResponse = {
-  indices?: any;
-  popularStocks?: any;
   news: HomeNewsItem[];
   tickers: HomeTicker[];
+
+  // 홈 추천 5개
+  recommendations: RecommendationsResponse;
+
+  // 홈/더보기 일치용
+  recommendationVersion?: string | null;
+  recommendationStatus?: "BUILDING" | "READY" | string;
+  recommendationUpdatedAt?: number | null;
 };
 
 function makeFakeSparkline(base: number, n = 24) {
@@ -36,8 +60,8 @@ function makeFakeSparkline(base: number, n = 24) {
 }
 
 export async function fetchHome(): Promise<HomeResponse> {
-  const res = await api.get("/home");
-  const data: HomeResponse = res.data;
+  const res = await api.get<HomeResponse>("/home");
+  const data = res.data;
 
   return {
     ...data,
@@ -48,27 +72,9 @@ export async function fetchHome(): Promise<HomeResponse> {
   };
 }
 
-export type SparklinePoint = {
-  index: number;
-  close: number;
-};
-
-export type RecommendedItem = {
-  symbol: string;
-  price: number | null;
-  changeRate: number | null;
-  sparkline: SparklinePoint[];
-   values?: number[];
-};
-
-export type RecommendationsResponse = {
-  items: RecommendedItem[];
-  nextOffset: number | null;
-};
-
-export async function fetchRecommendations(offset = 0) {
+export async function fetchRecommendations(offset = 0, v?: string | null) {
   const res = await api.get<RecommendationsResponse>("/home/recommendations", {
-    params: { offset },
+    params: { offset, v: v ?? undefined },
   });
 
   const data = res.data;
@@ -78,23 +84,16 @@ export async function fetchRecommendations(offset = 0) {
     items: (data.items ?? []).map((it) => {
       const closes =
         (it.sparkline ?? []).length > 0
-          ? it.sparkline.map((p) => p.close).filter((v) => Number.isFinite(v))
+          ? it.sparkline.map((p) => p.close).filter((x) => Number.isFinite(x))
           : [];
 
-      // ✅ 추천 종목 폴백: sparkline이 비면 가짜 생성
       const values =
-        closes.length > 0
-          ? closes
-          : makeFakeSparkline(it.price ?? 100, 24);
+        closes.length > 0 ? closes : makeFakeSparkline(it.price ?? 100, 24);
 
       return {
         ...it,
-        // sparkline 원본은 유지해도 되고(디버깅용)
-        // 프론트에서 바로 쓰기 편하게 values를 추가
         values,
       };
     }),
   };
 }
-
-
