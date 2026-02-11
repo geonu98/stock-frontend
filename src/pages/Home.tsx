@@ -4,6 +4,7 @@ import { useAuthStore } from "../store/authStore";
 import { fetchHome, type HomeResponse, type RecommendedItem } from "../api/home";
 import MiniSparkline from "../components/./market/MiniSparkline";
 import { safeSparkline } from "../utils/sparklineFallback";
+import { SkeletonHScroll } from "../components/skeleton/SkeletonCard";
 
 function fmtNumber(v: number, digits = 2) {
   return Number.isFinite(v)
@@ -91,6 +92,12 @@ export default function Home() {
 
   const recoVersion = home?.recommendationVersion ?? null;
 
+  // 추천 배너 노출 조건 (수정)
+  // - BUILDING 상태라도 추천이 "이미 일부라도" 보이면 배너는 굳이 안 띄움
+  // - 추천이 0개일 때만 "생성 중" 안내를 노출
+  const showRecoBuildingBanner =
+    recoBuilding && !homeLoading && recommendations.length === 0;
+
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 dark:bg-gray-950">
       <div className="mx-auto w-full max-w-5xl px-5 py-8 space-y-8">
@@ -175,13 +182,13 @@ export default function Home() {
           </div>
 
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {!homeLoading && tickers.length === 0 && (
+            {homeLoading ? (
+              <SkeletonHScroll count={4} />
+            ) : tickers.length === 0 ? (
               <div className="text-sm text-gray-500 dark:text-gray-400 px-1">
                 표시할 종목이 없습니다.
               </div>
-            )}
-
-            {!homeLoading &&
+            ) : (
               tickers.map((t) => {
                 const up = t.changePercent >= 0;
                 const badgeClass = up
@@ -227,7 +234,8 @@ export default function Home() {
 
                     <div className="mt-3 flex items-end justify-between gap-3">
                       <div className="text-xs text-gray-500 dark:text-gray-400">
-                        변동: {fmtSigned(t.change)} ({fmtSignedPercent(t.changePercent)})
+                        변동: {fmtSigned(t.change)} (
+                        {fmtSignedPercent(t.changePercent)})
                       </div>
 
                       <MiniSparkline
@@ -239,7 +247,8 @@ export default function Home() {
                     </div>
                   </button>
                 );
-              })}
+              })
+            )}
           </div>
         </section>
 
@@ -252,7 +261,9 @@ export default function Home() {
             <button
               className="text-sm font-semibold text-gray-600 dark:text-gray-300 hover:underline"
               onClick={() => {
-                const qs = recoVersion ? `?v=${encodeURIComponent(recoVersion)}` : "";
+                const qs = recoVersion
+                  ? `?v=${encodeURIComponent(recoVersion)}`
+                  : "";
                 navigate(`/recommendations${qs}`);
               }}
             >
@@ -260,7 +271,8 @@ export default function Home() {
             </button>
           </div>
 
-          {recoBuilding && (
+          {/* 배너 조건 수정: 추천이 0개일 때만 표시 */}
+          {showRecoBuildingBanner && (
             <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
               <div className="text-sm text-gray-600 dark:text-gray-300">
                 추천 종목을 생성 중입니다. 잠시 후 다시 확인해 주세요.
@@ -269,13 +281,13 @@ export default function Home() {
           )}
 
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {!homeLoading && recommendations.length === 0 && (
+            {homeLoading ? (
+              <SkeletonHScroll count={4} />
+            ) : recommendations.length === 0 ? (
               <div className="text-sm text-gray-500 dark:text-gray-400 px-1">
                 표시할 추천 종목이 없습니다.
               </div>
-            )}
-
-            {!homeLoading &&
+            ) : (
               recommendations.map((r) => {
                 const changeRate = Number(r.changeRate ?? 0);
                 const up = changeRate >= 0;
@@ -284,8 +296,7 @@ export default function Home() {
                   : "text-blue-600 dark:text-blue-300";
 
                 const sparkValues = safeSparkline(
-                  (r.values ??
-                    (r.sparkline ?? []).map((p) => p.close)) as number[],
+                  (r.values ?? (r.sparkline ?? []).map((p) => p.close)) as number[],
                   30
                 );
 
@@ -340,7 +351,8 @@ export default function Home() {
                     </div>
                   </button>
                 );
-              })}
+              })
+            )}
           </div>
 
           {!homeLoading && recoNextOffset == null && (
@@ -371,7 +383,8 @@ export default function Home() {
                     key={`${n.url}-${idx}`}
                     className="w-full text-left px-5 py-4 hover:bg-gray-50 dark:hover:bg-gray-800"
                     onClick={() => {
-                      if (n.url) window.open(n.url, "_blank", "noopener,noreferrer");
+                      if (n.url)
+                        window.open(n.url, "_blank", "noopener,noreferrer");
                     }}
                     title="새 탭에서 열기"
                   >

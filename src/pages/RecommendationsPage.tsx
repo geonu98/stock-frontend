@@ -24,8 +24,9 @@ export default function RecommendationsPage() {
   const navigate = useNavigate();
   const location = useLocation();
 
+  // 홈에서 내려준 version (같은 추천 세트 보장)
   const params = new URLSearchParams(location.search);
-  const v = params.get("v"); // 홈에서 내려준 version
+  const v = params.get("v");
 
   const [items, setItems] = useState<RecommendedItem[]>([]);
   const [nextOffset, setNextOffset] = useState<number | null>(0);
@@ -38,12 +39,18 @@ export default function RecommendationsPage() {
     [nextOffset, loading]
   );
 
+  // ✅ 로드 함수 (replace / append 공용)
   async function load(offset: number, mode: "replace" | "append") {
+    if (loading) return; // 중복 클릭 방지
+
     setLoading(true);
     setError(null);
 
     try {
-      const data = (await fetchRecommendations(offset, v)) as RecommendationsResponse;
+      const data = (await fetchRecommendations(
+        offset,
+        v
+      )) as RecommendationsResponse;
 
       const normalized = (data.items ?? []).map((it) => ({
         ...it,
@@ -56,18 +63,27 @@ export default function RecommendationsPage() {
       setItems((prev) =>
         mode === "replace" ? normalized : [...prev, ...normalized]
       );
+
       setNextOffset(data.nextOffset ?? null);
     } catch (e: any) {
-      const msg =
-        e?.response?.data?.message ||
-        e?.message ||
-        "추천 조회 중 오류가 발생했습니다.";
-      setError(String(msg));
+      const status = e?.response?.status;
+
+      // ✅ 429 전용 메시지
+      if (status === 429) {
+        setError("요청이 많습니다. 잠시 후 다시 시도해 주세요.");
+      } else {
+        setError(
+          e?.response?.data?.message ||
+            e?.message ||
+            "추천 조회 중 오류가 발생했습니다."
+        );
+      }
     } finally {
       setLoading(false);
     }
   }
 
+  // 첫 페이지 로드
   useEffect(() => {
     load(0, "replace");
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -75,6 +91,7 @@ export default function RecommendationsPage() {
 
   return (
     <div className="mx-auto w-full max-w-3xl px-4 py-6">
+      {/* 헤더 */}
       <div className="mb-4 flex items-center justify-between">
         <div>
           <h1 className="text-xl font-bold">추천 종목 더보기</h1>
@@ -91,12 +108,13 @@ export default function RecommendationsPage() {
         </button>
       </div>
 
+      {/* 에러 박스 */}
       {error && (
         <div className="mb-4 rounded-md border border-red-200 bg-red-50 px-3 py-2 text-sm text-red-700">
           {error}
           <div className="mt-2">
             <button
-              onClick={() => load(0, "replace")}
+              onClick={() => load(items.length === 0 ? 0 : items.length, items.length === 0 ? "replace" : "append")}
               className="rounded-md border px-2 py-1 text-xs font-semibold hover:bg-white"
             >
               다시 시도
@@ -105,6 +123,7 @@ export default function RecommendationsPage() {
         </div>
       )}
 
+      {/* 리스트 */}
       <div className="space-y-3">
         {items.map((it) => {
           const pct = it.changeRate ?? 0;
@@ -120,13 +139,20 @@ export default function RecommendationsPage() {
           const spark = safeSparkline(it.values ?? [], 24);
 
           return (
-            <div key={it.symbol} className="rounded-xl border bg-white p-4 shadow-sm">
+            <div
+              key={it.symbol}
+              className="rounded-xl border bg-white p-4 shadow-sm"
+            >
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-base font-bold">{it.symbol}</div>
                   <div className="mt-1 flex items-center gap-2 text-sm">
-                    <span className="font-semibold">{fmtPrice(it.price)}</span>
-                    <span className={pctClass}>{fmtPct(it.changeRate)}</span>
+                    <span className="font-semibold">
+                      {fmtPrice(it.price)}
+                    </span>
+                    <span className={pctClass}>
+                      {fmtPct(it.changeRate)}
+                    </span>
                   </div>
                 </div>
 
@@ -138,12 +164,14 @@ export default function RecommendationsPage() {
           );
         })}
 
+        {/* 로딩 카드 */}
         {loading && (
           <div className="rounded-xl border bg-white p-4 text-sm text-gray-500">
             불러오는 중...
           </div>
         )}
 
+        {/* 빈 결과 */}
         {!loading && items.length === 0 && !error && (
           <div className="rounded-xl border bg-white p-4 text-sm text-gray-500">
             추천 결과가 없습니다.
@@ -151,7 +179,8 @@ export default function RecommendationsPage() {
         )}
       </div>
 
-      <div className="mt-6 flex items-center justify-center">
+      {/* 더보기 버튼 */}
+      <div className="mt-6 flex flex-col items-center gap-2">
         <button
           disabled={!canLoadMore}
           onClick={() => {
@@ -164,8 +193,19 @@ export default function RecommendationsPage() {
               : "cursor-not-allowed border bg-gray-100 text-gray-400",
           ].join(" ")}
         >
-          {nextOffset == null ? "마지막 페이지" : "더보기"}
+          {loading
+            ? "불러오는 중..."
+            : nextOffset == null
+            ? "마지막 페이지"
+            : "더보기"}
         </button>
+
+        {/* 안내 문구 */}
+        {nextOffset != null && !loading && (
+          <div className="text-xs text-gray-500">
+            일부 종목은 준비 중일 수 있습니다. 더보기를 누르면 추가로 표시됩니다.
+          </div>
+        )}
       </div>
     </div>
   );

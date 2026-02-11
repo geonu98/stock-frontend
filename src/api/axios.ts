@@ -3,7 +3,7 @@ import type { InternalAxiosRequestConfig } from "axios";
 import { useAuthStore } from "../store/authStore";
 
 const api = axios.create({
-  baseURL: "/api", // 🔥 proxy 기준
+  baseURL: import.meta.env.VITE_API_BASE_URL,
 });
 
 /**

@@ -1,5 +1,6 @@
 // src/pages/Market.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
+import { useLocation } from "react-router-dom"; // ✅ 추가: 쿼리스트링(symbol) 읽기
 
 import PriceLineChart from "../components/market/PriceLineChart";
 import OrderPanel from "../components/market/OrderPanel";
@@ -29,6 +30,7 @@ type MarketSummaryResponse = {
 };
 
 export default function Market() {
+  const location = useLocation(); // ✅ 추가
   const setLastOrder = useOrderStore((s) => s.setLastOrder);
 
   // 심볼 검색/선택
@@ -70,6 +72,25 @@ export default function Market() {
     };
   }, []);
 
+  /**
+   * ✅ 추천 카드/외부 링크에서 /market?symbol=TSLA 로 들어왔을 때 자동 반영
+   * - inputSymbol, symbol 둘 다 세팅
+   * - symbol이 바뀌면 아래 "데이터 로드 useEffect([symbol, days])"가 자동 실행됨
+   * - 불필요한 재설정 방지: 현재 symbol과 같으면 아무 것도 안 함
+   */
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const qs = params.get("symbol");
+    const next = qs?.trim().toUpperCase();
+
+    if (!next) return;
+    if (next === symbol) return; // ✅ 같은 심볼이면 중복 로드 방지
+
+    setInputSymbol(next);
+    setSymbol(next);
+    // days는 그대로 유지 (추천에서 들어와도 사용자가 보던 기간 유지)
+  }, [location.search, symbol]);
+
   // 환율 로드: 페이지 진입 시 1회만 호출
   useEffect(() => {
     let ignore = false;
@@ -86,7 +107,11 @@ export default function Market() {
           throw new Error(`환율 응답 실패 (${res.status}) ${text}`);
         }
 
-        const json = (await res.json()) as { base: string; quote: string; rate: number };
+        const json = (await res.json()) as {
+          base: string;
+          quote: string;
+          rate: number;
+        };
 
         if (!ignore) {
           const rate = Number(json?.rate);
@@ -145,7 +170,7 @@ export default function Market() {
       method: "GET",
       headers: { Accept: "application/json" },
       signal,
-      credentials: "include", // 쿠키 기반 인증 쓰는 경우 안전(불필요하면 제거 가능)
+ 
     });
 
     if (!res.ok) {
