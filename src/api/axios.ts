@@ -6,82 +6,112 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_BASE_URL,
 });
 
-/**
- * ✅ 로그인/리프레시/소셜콜백/이메일인증 등 "인증 이전" 구간 요청들
- * - Authorization 헤더를 붙이면 안 됨
- * - 401이 나도 refresh 로직을 타면 안 됨
- */
+// ✅ [중요] baseURL을 "서버 도메인(예: http://localhost:8080)"으로 두고,
+// 실제 API는 "/api/..."로 호출한다는 전제에 맞춰 PUBLIC_AUTH_PATHS도 "/api/auth" 기준으로 정리
 const PUBLIC_AUTH_PATHS = [
-  "/auth/login",
-  "/auth/signup",
-  "/auth/refresh",
-  "/auth/oauth",
-  "/auth/email", // EmailVerificationController: /api/auth/email/verify, /api/auth/email/exchange (인증 이전 플로우)
-  "/auth/resend-verification-email",
-  "/home",
+  "/api/auth/login",
+  "/api/auth/signup",
+  "/api/auth/refresh",
+  "/api/auth/oauth",
+  "/api/auth/email",
+  "/api/auth/resend-verification-email",
+  "/api/home",
 ];
 
-const isPublicAuthRequest = (url?: string) => {
-  if (!url) return false;
-  return PUBLIC_AUTH_PATHS.some((p) => url.startsWith(p));
-};
-// 요청 인터셉터
+const isPublicAuthRequest = (url?: string) =>
+  !!url && PUBLIC_AUTH_PATHS.some((p) => url.startsWith(p));
+
 api.interceptors.request.use((config: InternalAxiosRequestConfig) => {
   const url = config.url ?? "";
 
-  // ✅ /auth/** 요청에는 Authorization을 붙이지 않는다.
   if (!isPublicAuthRequest(url)) {
     const token = useAuthStore.getState().accessToken;
-    if (token) {
-      config.headers.Authorization = `Bearer ${token}`;
-    }
+    if (token) config.headers.Authorization = `Bearer ${token}`;
   }
-
   return config;
 });
+
+// ✅ refresh 동시성 락
+let refreshPromise: Promise<{ accessToken: string; refreshToken?: string }> | null = null;
+
+async function runRefreshOnce() {
+  const { refreshToken } = useAuthStore.getState();
+  if (!refreshToken) throw new Error("No refreshToken");
+
+  // ✅ [중요] 백엔드 매핑이 /api/auth/refresh 라면 여기 경로도 맞춰야 함
+  const refreshRes = await api.post("/api/auth/refresh", { refreshToken });
+  const { accessToken, refreshToken: newRT } = refreshRes.data as any;
+
+  useAuthStore.getState().setTokens(accessToken, newRT ?? refreshToken);
+
+  return { accessToken, refreshToken: newRT };
+}
+
+// ✅ ✅ ✅ [추가] 전역 로그인 모달을 "한 번만" 열기 위한 헬퍼
+function openLoginModalOnce() {
+  const st = useAuthStore.getState();
+
+  // 이미 모달이 열려있으면 중복 오픈 방지
+  // (401 연쇄로 여러 요청이 터질 수 있음)
+  if ((st as any).loginModalOpen) return;
+
+  const redirectTo = window.location.pathname + window.location.search;
+
+  // authStore에 openLoginModal(redirectTo) 추가해둔 버전 기준
+  if (typeof (st as any).openLoginModal === "function") {
+    (st as any).openLoginModal(redirectTo);
+  }
+}
 
 api.interceptors.response.use(
   (res) => res,
   async (err: AxiosError) => {
     const original: any = err.config;
-
     const is401 = err.response?.status === 401;
 
-    const url =
-      typeof original?.url === "string" ? (original.url as string) : "";
+    const url = typeof original?.url === "string" ? (original.url as string) : "";
 
-    const isRefreshCall = url.startsWith("/auth/refresh");
+    // ✅ [중요] refresh 호출 여부도 /api/auth/refresh 로 맞춤
+    const isRefreshCall = url.startsWith("/api/auth/refresh");
     const isPublicAuth = isPublicAuthRequest(url);
 
-    // ✅ auth 관련(public) 요청에서 401이면 refresh 시도하지 말고 그대로 실패 처리
+    // ✅ public/auth/refresh에서 401이면 절대 refresh 시도 X
     if (is401 && (isRefreshCall || isPublicAuth)) {
       return Promise.reject(err);
     }
 
-    if (is401 && !original?._retry) {
-      original._retry = true;
+    if (!is401) return Promise.reject(err);
 
-      try {
-        const { refreshToken } = useAuthStore.getState();
-        if (!refreshToken) throw new Error("No refreshToken");
+    // ✅ 같은 요청을 무한 재시도 방지
+    if (original?._retry) return Promise.reject(err);
+    original._retry = true;
 
-        // ✅ refresh 요청 자체도 /auth/** 이므로 Authorization 없이 나감
-        const refreshRes = await api.post("/auth/refresh", { refreshToken });
-
-        const { accessToken, refreshToken: newRT } = refreshRes.data as any;
-
-        useAuthStore
-          .getState()
-          .setTokens(accessToken, newRT ?? refreshToken);
-
-        original.headers.Authorization = `Bearer ${accessToken}`;
-        return api(original);
-      } catch {
-        useAuthStore.getState().logout();
+    try {
+      // ✅ 이미 refresh 진행중이면 그 Promise를 기다렸다가 재시도
+      if (!refreshPromise) {
+        refreshPromise = runRefreshOnce().finally(() => {
+          refreshPromise = null;
+        });
       }
-    }
 
-    return Promise.reject(err);
+      const { accessToken } = await refreshPromise;
+
+      // ✅ 새 AT로 원래 요청 재시도
+      original.headers = original.headers ?? {};
+      original.headers.Authorization = `Bearer ${accessToken}`;
+
+      return api(original);
+    } catch (e) {
+      // ✅ ✅ ✅ [추가] refresh 실패/토큰 불일치/만료 시 UX 처리
+      // - 토큰을 정리하고 (logout)
+      // - 전역 로그인 모달을 띄워서 사용자가 선택하게 함
+      useAuthStore.getState().logout();
+
+      // ✅ 전역 모달 오픈 (중복 방지 포함)
+      openLoginModalOnce();
+
+      return Promise.reject(e);
+    }
   }
 );
 
