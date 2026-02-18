@@ -16,7 +16,9 @@ export default function OAuthCallback() {
   useEffect(() => {
     const run = async () => {
       const code = params.get("code");
-      const provider = params.get("state"); // ✅ 여기!
+      const provider = params.get("state"); 
+      
+    console.log("🔥 CALLBACK START", { code, provider });
 
       if (!provider || !code) {
         navigate("/login", { replace: true });
@@ -24,12 +26,14 @@ export default function OAuthCallback() {
       }
 
       try {
+        console.log(" calling backend");
         // ✅ 백엔드 매핑은 /api/auth/oauth/{provider}/callback
-        const res = await api.post(`/auth/oauth/${provider}/callback`, {
+        const res = await api.post(`/api/auth/oauth/${provider}/callback`, {
           code,
           deviceInfo: getDeviceInfo(),
+          
         });
-
+     console.log("✅ backend success", res.data);
         const { accessToken, refreshToken } = res.data as any;
         useAuthStore.getState().setTokens(accessToken, refreshToken);
 

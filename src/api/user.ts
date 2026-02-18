@@ -9,6 +9,6 @@ export type UserProfileResponse = {
 };
 
 export async function getMe() {
-  const res = await api.get("/user/me"); // baseURL이 /api니까 => /api/user/me
+  const res = await api.get("/api/user/me"); 
   return res.data as UserProfileResponse;
 }

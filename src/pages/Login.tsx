@@ -1,9 +1,10 @@
 import { useState } from "react";
 import { login } from "../api/auth";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, useNavigate, useLocation } from "react-router-dom";
 
 export default function Login() {
   const navigate = useNavigate();
+  const location = useLocation();
 
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -22,8 +23,9 @@ export default function Login() {
 
     try {
       await login(email, password);
-      // ✅ 로그인 성공 → 홈(또는 대시보드)로 이동
-      navigate("/");
+   // ✅ 로그인 성공 후 원래 페이지로 복귀
+const from = location.state?.from || "/";
+navigate(from, { replace: true });
     } catch (err: any) {
       console.error("login failed:", err);
       // 백엔드가 message를 주면 그걸 표시, 아니면 기본값
