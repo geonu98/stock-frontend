@@ -1,7 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
-import { fetchHome, type HomeResponse, type RecommendedItem } from "../api/home";
+// 🔁 변경: fetchRecommendations 추가
+import {
+  fetchHome,
+  fetchRecommendations,
+  type HomeResponse,
+  type RecommendedItem,
+} from "../api/home";
 import MiniSparkline from "../components/./market/MiniSparkline";
 import { safeSparkline } from "../utils/sparklineFallback";
 import { SkeletonHScroll } from "../components/skeleton/SkeletonCard";
@@ -57,6 +63,11 @@ export default function Home() {
   const [homeLoading, setHomeLoading] = useState(false);
   const [homeError, setHomeError] = useState<string | null>(null);
 
+  // 🔽 추가: 홈 추천을 /api/home/recommendations 로 별도 호출하기 위한 상태
+  const [recoItems, setRecoItems] = useState<RecommendedItem[]>([]);
+  const [recoLoading, setRecoLoading] = useState(false);
+  const [recoError, setRecoError] = useState<string | null>(null);
+
   useEffect(() => {
     const run = async () => {
       setHomeLoading(true);
@@ -73,13 +84,44 @@ export default function Home() {
     run();
   }, []);
 
+  // 🔽 추가:
+  // 홈에서 받은 recommendationVersion 기준으로
+  // /api/home/recommendations 를 별도로 호출하여
+  // 더보기 화면과 동일한 추천 데이터를 사용
+  useEffect(() => {
+    if (!home) return;
+
+    const runReco = async () => {
+      setRecoLoading(true);
+      setRecoError(null);
+
+      try {
+        const res = await fetchRecommendations(
+          0,
+          home.recommendationVersion ?? null
+        );
+        setRecoItems(res.items ?? []);
+      } catch (e: any) {
+        setRecoError(e?.message ?? "추천 종목을 불러오지 못했습니다.");
+        setRecoItems([]);
+      } finally {
+        setRecoLoading(false);
+      }
+    };
+
+    runReco();
+  }, [home?.recommendationVersion, !!home]);
+
   const tickers = useMemo(() => home?.tickers ?? [], [home]);
   const news = useMemo(() => home?.news ?? [], [home]);
 
   // 홈 추천(5개)
+  // 🔁 변경:
+  // 기존에는 /api/home 응답의 recommendations를 사용했지만,
+  // 이제는 /api/home/recommendations 별도 호출 결과를 사용
   const recommendations: RecommendedItem[] = useMemo(
-    () => home?.recommendations?.items ?? [],
-    [home]
+    () => recoItems ?? [],
+    [recoItems]
   );
 
   const recoNextOffset = useMemo(
@@ -95,8 +137,10 @@ export default function Home() {
   // 추천 배너 노출 조건 (수정)
   // - BUILDING 상태라도 추천이 "이미 일부라도" 보이면 배너는 굳이 안 띄움
   // - 추천이 0개일 때만 "생성 중" 안내를 노출
+  // 🔁 변경:
+  // 추천이 별도 로딩 중일 때는 배너가 먼저 뜨지 않도록 recoLoading 추가
   const showRecoBuildingBanner =
-    recoBuilding && !homeLoading && recommendations.length === 0;
+    recoBuilding && !homeLoading && !recoLoading && recommendations.length === 0;
 
   return (
     <div className="min-h-[calc(100vh-64px)] bg-gray-50 dark:bg-gray-950">
@@ -280,8 +324,18 @@ export default function Home() {
             </div>
           )}
 
+          {/* 🔽 추가: 추천 별도 호출이 실패했을 때 안내 (홈 전체 오류랑 분리) */}
+          {!homeLoading && !recoLoading && recoError && (
+            <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 px-5 py-4">
+              <div className="text-sm text-rose-600 dark:text-rose-300">
+                {recoError}
+              </div>
+            </div>
+          )}
+
           <div className="flex gap-3 overflow-x-auto pb-2">
-            {homeLoading ? (
+            {/* 🔁 변경: 추천은 homeLoading 뿐 아니라 recoLoading도 반영 */}
+            {homeLoading || recoLoading ? (
               <SkeletonHScroll count={4} />
             ) : recommendations.length === 0 ? (
               <div className="text-sm text-gray-500 dark:text-gray-400 px-1">

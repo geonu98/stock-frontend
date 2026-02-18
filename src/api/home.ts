@@ -60,7 +60,7 @@ function makeFakeSparkline(base: number, n = 24) {
 }
 
 export async function fetchHome(): Promise<HomeResponse> {
-  const res = await api.get<HomeResponse>("/home");
+  const res = await api.get<HomeResponse>("/api/home");
   const data = res.data;
 
   return {
@@ -73,7 +73,7 @@ export async function fetchHome(): Promise<HomeResponse> {
 }
 
 export async function fetchRecommendations(offset = 0, v?: string | null) {
-  const res = await api.get<RecommendationsResponse>("/home/recommendations", {
+  const res = await api.get<RecommendationsResponse>("/api/home/recommendations", {
     params: { offset, v: v ?? undefined },
   });
 

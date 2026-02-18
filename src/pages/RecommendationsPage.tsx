@@ -139,10 +139,13 @@ export default function RecommendationsPage() {
           const spark = safeSparkline(it.values ?? [], 24);
 
           return (
-            <div
-              key={it.symbol}
-              className="rounded-xl border bg-white p-4 shadow-sm"
-            >
+          <div
+  key={it.symbol} // 마켓페이지가 쿼리스트링으로 조회함 
+  className="rounded-xl border bg-white p-4 shadow-sm cursor-pointer hover:shadow-md transition"
+  onClick={() =>
+    navigate(`/market?symbol=${it.symbol}`)
+  }
+>
               <div className="flex items-center justify-between gap-3">
                 <div>
                   <div className="text-base font-bold">{it.symbol}</div>
