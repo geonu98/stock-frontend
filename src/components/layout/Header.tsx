@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from "react";
+import { useState, useEffect, useMemo ,useRef  } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { logout as logoutApi } from "../../api/auth";
@@ -14,6 +14,8 @@ function NavLink({
 }) {
   const { pathname } = useLocation();
   const active = pathname === to;
+  
+
 
   return (
     <Link
@@ -57,10 +59,25 @@ export default function Header() {
     if (darkMode) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
   }, [darkMode]);
+  const triedMeRef = useRef(false);
+useEffect(() => {
+  // 로그아웃 상태면 리셋
+  if (!isLoggedIn) {
+    triedMeRef.current = false;
+    return;
+  }
 
-  useEffect(() => {
-    if (isLoggedIn && !user && !isMeLoading) fetchMe();
-  }, [isLoggedIn, user, isMeLoading, fetchMe]);
+  // 이미 시도했으면 다시 안 함 (401이어도 재시도 X)
+  if (triedMeRef.current) return;
+
+  if (!user && !isMeLoading) {
+    triedMeRef.current = true;
+    fetchMe().catch(() => {
+      // 실패해도 반복 호출 막기
+      // 필요하면 여기서 logout 처리
+    });
+  }
+}, [isLoggedIn, user, isMeLoading, fetchMe]);
 
   const handleLogout = async () => {
     try {

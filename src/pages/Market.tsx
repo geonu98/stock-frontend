@@ -1,6 +1,7 @@
 // src/pages/Market.tsx
 import { useEffect, useMemo, useRef, useState } from "react";
-import { useLocation } from "react-router-dom"; // ✅ 추가: 쿼리스트링(symbol) 읽기
+import { useLocation } from "react-router-dom";
+import { useAuthStore } from "../store/authStore"; 
 
 import PriceLineChart from "../components/market/PriceLineChart";
 import OrderPanel from "../components/market/OrderPanel";
@@ -10,6 +11,9 @@ import type { DailyCandle, Quote } from "../api/market";
 import { getMockMarket } from "../mocks/market";
 import type { OrderDraft } from "../types/order";
 import { useOrderStore } from "../store/orderStore";
+
+// axios 인스턴스 사용 (토큰/refresh 인터셉터 적용)
+import api from "../api/axios";
 
 type Days = 7 | 30 | 90;
 
@@ -30,8 +34,12 @@ type MarketSummaryResponse = {
 };
 
 export default function Market() {
-  const location = useLocation(); // ✅ 추가
+  const location = useLocation();
+const openLoginModal = useAuthStore((s) => s.openLoginModal);
+const user = useAuthStore((s) => s.user);
   const setLastOrder = useOrderStore((s) => s.setLastOrder);
+
+
 
   // 심볼 검색/선택
   const [inputSymbol, setInputSymbol] = useState("AAPL");
@@ -44,7 +52,7 @@ export default function Market() {
   const [candlesAll, setCandlesAll] = useState<DailyCandle[]>([]);
   const [quote, setQuote] = useState<Quote | null>(null);
 
-  // 로딩/에러(실 API 붙일 때도 그대로 활용 가능)
+  // 로딩/에러
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
 
@@ -61,62 +69,53 @@ export default function Market() {
     null
   );
   const toastTimerRef = useRef<number | null>(null);
+  //성공 토스트 메세지임
+  const showToast2 = (title: string, desc: string) => {
+    setToast({ title, desc });
 
-  // 환율(USD->KRW). 로딩 전/실패 시 null
+    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
+
+    toastTimerRef.current = window.setTimeout(() => {
+      setToast(null);
+      toastTimerRef.current = null;
+    }, 1500);
+  };
+
+  // 환율
   const [usdKrw, setUsdKrw] = useState<number | null>(null);
 
-  // 토스트 타이머 정리(언마운트 시)
+  //  로그인 여부 확인 함수
+// (기존: localStorage accessToken 체크 / (추가로) /api/user/me 호출로 확인
+//  → 이제: App에서 fetchMe로 user 상태를 관리하고, 401/만료는 axios 인터셉터에서 전역 처리)
+
   useEffect(() => {
     return () => {
       if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
     };
   }, []);
 
-  /**
-   * ✅ 추천 카드/외부 링크에서 /market?symbol=TSLA 로 들어왔을 때 자동 반영
-   * - inputSymbol, symbol 둘 다 세팅
-   * - symbol이 바뀌면 아래 "데이터 로드 useEffect([symbol, days])"가 자동 실행됨
-   * - 불필요한 재설정 방지: 현재 symbol과 같으면 아무 것도 안 함
-   */
+  // 쿼리스트링 symbol 자동 반영
   useEffect(() => {
     const params = new URLSearchParams(location.search);
     const qs = params.get("symbol");
     const next = qs?.trim().toUpperCase();
 
     if (!next) return;
-    if (next === symbol) return; // ✅ 같은 심볼이면 중복 로드 방지
+    if (next === symbol) return;
 
     setInputSymbol(next);
     setSymbol(next);
-    // days는 그대로 유지 (추천에서 들어와도 사용자가 보던 기간 유지)
   }, [location.search, symbol]);
 
-  // 환율 로드: 페이지 진입 시 1회만 호출
+  // 환율 로드
   useEffect(() => {
     let ignore = false;
 
     (async () => {
       try {
-        const res = await fetch(FX_ENDPOINT, {
-          method: "GET",
-          headers: { Accept: "application/json" },
-        });
-
-        if (!res.ok) {
-          const text = await res.text().catch(() => "");
-          throw new Error(`환율 응답 실패 (${res.status}) ${text}`);
-        }
-
-        const json = (await res.json()) as {
-          base: string;
-          quote: string;
-          rate: number;
-        };
-
-        if (!ignore) {
-          const rate = Number(json?.rate);
-          setUsdKrw(Number.isFinite(rate) ? rate : null);
-        }
+        const res = await api.get(FX_ENDPOINT);
+        const rate = Number(res.data?.rate);
+        if (!ignore) setUsdKrw(Number.isFinite(rate) ? rate : null);
       } catch {
         if (!ignore) setUsdKrw(null);
       }
@@ -127,19 +126,16 @@ export default function Market() {
     };
   }, []);
 
-  // 1) candles 기간 필터링(목/실 데이터 모두 공통)
   const candles = useMemo(() => {
     return candlesAll.slice(-days);
   }, [candlesAll, days]);
 
-  // 2) 현재가(quote 우선)
   const currentPrice = useMemo(() => {
     if (quote?.price && quote.price > 0) return quote.price;
     const last = candles[candles.length - 1];
     return last?.close ?? null;
   }, [quote, candles]);
 
-  // 3) 요약
   const summary = useMemo(() => {
     const last = candles[candles.length - 1];
     return {
@@ -150,41 +146,30 @@ export default function Market() {
     };
   }, [quote, candles]);
 
-  /**
-   * 실 API 호출 함수
-   * - 백엔드: GET /api/market/summary?symbol=...&days=...
-   * - 응답: { quote: {...}, candles: [...] }
-   */
+  async function createTrade(body: {
+    symbol: string;
+    side: "BUY" | "SELL";
+    kind: "MARKET" | "LIMIT";
+    quantity: number;
+    priceUsd: number;
+    usdKrwRate?: number;
+  }) {
+    const res = await api.post<number>("/api/trades", body);
+    return res.data;
+  }
+
   async function fetchMarketSummary(params: {
     symbol: string;
     days: number;
     signal?: AbortSignal;
   }): Promise<MarketSummaryResponse> {
-    const { symbol, days, signal } = params;
-
-    const url = `${SUMMARY_ENDPOINT}?symbol=${encodeURIComponent(
-      symbol
-    )}&days=${days}`;
-
-    const res = await fetch(url, {
-      method: "GET",
-      headers: { Accept: "application/json" },
-      signal,
- 
+    const res = await api.get(SUMMARY_ENDPOINT, {
+      params: { symbol: params.symbol, days: params.days },
+      signal: params.signal,
     });
-
-    if (!res.ok) {
-      const text = await res.text().catch(() => "");
-      throw new Error(
-        `시세 데이터를 불러오지 못했습니다. (${res.status}) ${text}`
-      );
-    }
-
-    const data = (await res.json()) as MarketSummaryResponse;
-    return data;
+    return res.data;
   }
 
-  // 데이터 로드 (mock 또는 실 API)
   useEffect(() => {
     const controller = new AbortController();
     let ignore = false;
@@ -196,7 +181,6 @@ export default function Market() {
       try {
         if (USE_MOCK) {
           const r = getMockMarket(symbol);
-
           if (ignore) return;
           setCandlesAll(r.candles);
           setQuote(r.quote);
@@ -213,13 +197,16 @@ export default function Market() {
         if (ignore) return;
         setCandlesAll(r.candles);
         setQuote(r.quote);
-
         setSelectedPrice(null);
       } catch (e: any) {
         if (ignore) return;
         if (e?.name === "AbortError") return;
 
-        setErrorMsg(e?.message ?? "데이터를 불러오지 못했습니다.");
+        const msg =
+          e?.response?.data?.message ??
+          e?.message ??
+          "데이터를 불러오지 못했습니다.";
+        setErrorMsg(msg);
       } finally {
         if (!ignore) setLoading(false);
       }
@@ -232,64 +219,83 @@ export default function Market() {
     };
   }, [symbol, days]);
 
-  // Enter 조회
   const submitSymbol = () => {
     const s = inputSymbol.trim().toUpperCase();
     if (!s) return;
     setSymbol(s);
   };
 
-  // 주문 draft → confirm 오버레이
-  const onSubmitDraft = (d: OrderDraft) => {
-    setDraft(d);
-    setConfirmOpen(true);
-  };
+  // ✅ 로그인 체크 후 주문 처리
+ const onSubmitDraft = async (d: OrderDraft) => {
+  //  서버 기준 로그인 확인
+  // (기존: ensureLoggedIn으로 /api/user/me 호출 → 이제 user 상태로 판단 + 401은 인터셉터가 전역 처리)
+  if (!user) {
+    const redirectTo = location.pathname + location.search;
+    openLoginModal(redirectTo);
+    return;
+  }
 
-  // 중앙 토스트 표시(2줄)
-  const showToast2 = (title: string, desc: string) => {
-    setToast({ title, desc });
+  setDraft(d);
+  setConfirmOpen(true);
+};
 
-    if (toastTimerRef.current) window.clearTimeout(toastTimerRef.current);
-
-    toastTimerRef.current = window.setTimeout(() => {
-      setToast(null);
-      toastTimerRef.current = null;
-    }, 1500);
-  };
-
-  // 주문 확정
   const onConfirm = async () => {
     if (!draft) return;
 
     try {
       setConfirmLoading(true);
 
-      setLastOrder(draft);
+      const fallback = draft.expectedFillPrice ?? draft.currentPrice;
+      const priceUsd =
+        draft.kind === "LIMIT" ? draft.price ?? fallback : fallback;
 
+      if (!priceUsd || !Number.isFinite(priceUsd) || priceUsd <= 0) {
+        throw new Error("가격 정보를 확인할 수 없습니다.");
+      }
+
+      await createTrade({
+        symbol: draft.symbol,
+        side: draft.side,
+        kind: draft.kind,
+        quantity: draft.quantity,
+        priceUsd,
+        usdKrwRate: draft.usdKrw,
+      });
+
+      showToast2(
+        "주문이 완료되었습니다",
+        `${draft.symbol} ${
+          draft.side === "BUY" ? "매수" : "매도"
+        } ${draft.quantity.toLocaleString()}주`
+      );
+
+      setLastOrder(draft);
       setConfirmOpen(false);
       setDraft(null);
       setSelectedPrice(null);
 
-      const sideText = draft.side === "BUY" ? "매수" : "매도";
-      const kindText = draft.kind === "LIMIT" ? "지정가" : "시장가";
-      const qtyText = `${draft.quantity.toLocaleString("ko-KR")}주`;
+   } catch (e: any) {
+  //  토큰 만료/불일치 처리
+  // (기존: 여기서 localStorage 토큰 제거 + 로컬 모달 오픈
+  //  → 이제: axios 인터셉터가 refresh 시도 후 실패하면 logout + 전역 모달 오픈까지 처리)
+  if (e?.response?.status === 401) {
+    setConfirmOpen(false);
+    setDraft(null);
 
-      let priceText = "";
-      if (draft.kind === "LIMIT") {
-        const p = draft.price ?? draft.expectedFillPrice;
-        if (typeof p === "number" && Number.isFinite(p)) {
-          priceText = ` ${p.toFixed(2)}원`;
-        }
-      }
+    showToast2("로그인이 만료되었습니다", "다시 로그인해주세요");
+    // 전역 모달은 인터셉터가 이미 열어줌(중복 방지 로직 포함)
+    return;
+  }
 
-      showToast2(
-        "주문이 접수되었습니다",
-        `${draft.symbol} ${sideText} ${qtyText} · ${kindText}${priceText}`
-      );
-    } finally {
-      setConfirmLoading(false);
-    }
+  showToast2(
+    "주문 실패",
+    e?.response?.data?.message ?? e?.message ?? "잠시 후 다시 시도해주세요"
+  );
+} finally {
+  setConfirmLoading(false);
+}
   };
+
 
   const fmt = (n?: number | null, fractionDigits = 2) => {
     if (typeof n !== "number" || !Number.isFinite(n)) return "-";
@@ -299,93 +305,14 @@ export default function Market() {
     });
   };
 
-  return (
+   return (
     <div className="mx-auto max-w-[1200px] p-6">
       <div className="grid grid-cols-1 gap-6 lg:grid-cols-[1fr_420px]">
+        {/* 왼쪽 */}
         <div className="space-y-6">
+          {/* 종목 검색 */}
           <div className="rounded-3xl border border-gray-200 bg-white p-5">
-            <div className="flex items-start justify-between gap-3">
-              <div className="text-lg font-bold text-gray-900">
-                {symbol} · 일별 증가
-              </div>
-
-              <div className="flex items-center gap-2 rounded-2xl border border-gray-200 p-1">
-                <button
-                  type="button"
-                  className={`h-9 px-3 rounded-xl text-sm font-semibold ${
-                    days === 7
-                      ? "bg-gray-900 text-white"
-                      : "bg-white text-gray-700"
-                  }`}
-                  onClick={() => setDays(7)}
-                >
-                  7일
-                </button>
-                <button
-                  type="button"
-                  className={`h-9 px-3 rounded-xl text-sm font-semibold ${
-                    days === 30
-                      ? "bg-gray-900 text-white"
-                      : "bg-white text-gray-700"
-                  }`}
-                  onClick={() => setDays(30)}
-                >
-                  30일
-                </button>
-                <button
-                  type="button"
-                  className={`h-9 px-3 rounded-xl text-sm font-semibold ${
-                    days === 90
-                      ? "bg-gray-900 text-white"
-                      : "bg-white text-gray-700"
-                  }`}
-                  onClick={() => setDays(90)}
-                >
-                  90일
-                </button>
-              </div>
-            </div>
-
-            <div className="mt-4">
-              {loading ? (
-                <div className="h-64 w-full rounded-2xl bg-gray-100 animate-pulse" />
-              ) : errorMsg ? (
-                <div className="h-64 w-full rounded-2xl border border-gray-200 flex items-center justify-center text-sm text-gray-500">
-                  {errorMsg}
-                </div>
-              ) : (
-                <PriceLineChart
-                  data={candles}
-                  title={""}
-                  onPriceSelect={(price) => setSelectedPrice(price)}
-                />
-              )}
-            </div>
-
-            <div className="mt-3 text-sm text-gray-500">
-              점 포인트를 클릭하면 지정가로 선택돼요.
-            </div>
-          </div>
-
-          <div className="rounded-3xl border border-gray-200 bg-white p-5">
-            <div className="text-sm font-semibold text-gray-900 mb-3">
-              요약
-            </div>
-
-            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
-              <SummaryItem label="시가" value={fmt(summary.open)} />
-              <SummaryItem label="고가" value={fmt(summary.high)} />
-              <SummaryItem label="저가" value={fmt(summary.low)} />
-              <SummaryItem label="전일 종가" value={fmt(summary.previousClose)} />
-            </div>
-          </div>
-        </div>
-
-        <div className="space-y-4">
-          <div className="rounded-3xl border border-gray-200 bg-white p-5">
-            <div className="text-sm font-semibold text-gray-900 mb-2">
-              종목 검색
-            </div>
+            <div className="text-sm font-semibold text-gray-900 mb-2">종목 검색</div>
 
             <div className="flex gap-2">
               <input
@@ -395,7 +322,7 @@ export default function Market() {
                   if (e.key === "Enter") submitSymbol();
                 }}
                 className="h-12 flex-1 rounded-2xl border border-gray-200 px-4 outline-none"
-                placeholder="종목을 검색해보세요"
+                placeholder="종목을 검색해보세요 (예: AAPL)"
               />
               <button
                 type="button"
@@ -423,6 +350,76 @@ export default function Market() {
             </div>
           </div>
 
+          {/* 차트 */}
+          <div className="rounded-3xl border border-gray-200 bg-white p-5">
+            <div className="flex items-start justify-between gap-3">
+              <div className="text-lg font-bold text-gray-900">{symbol} · 일별</div>
+
+              <div className="flex items-center gap-2 rounded-2xl border border-gray-200 p-1">
+                <button
+                  type="button"
+                  className={`h-9 px-3 rounded-xl text-sm font-semibold ${
+                    days === 7 ? "bg-gray-900 text-white" : "bg-white text-gray-700"
+                  }`}
+                  onClick={() => setDays(7)}
+                >
+                  7일
+                </button>
+                <button
+                  type="button"
+                  className={`h-9 px-3 rounded-xl text-sm font-semibold ${
+                    days === 30 ? "bg-gray-900 text-white" : "bg-white text-gray-700"
+                  }`}
+                  onClick={() => setDays(30)}
+                >
+                  30일
+                </button>
+                <button
+                  type="button"
+                  className={`h-9 px-3 rounded-xl text-sm font-semibold ${
+                    days === 90 ? "bg-gray-900 text-white" : "bg-white text-gray-700"
+                  }`}
+                  onClick={() => setDays(90)}
+                >
+                  90일
+                </button>
+              </div>
+            </div>
+
+            <div className="mt-4">
+              {loading ? (
+                <div className="h-64 w-full rounded-2xl bg-gray-100 animate-pulse" />
+              ) : errorMsg ? (
+                <div className="h-64 w-full rounded-2xl border border-gray-200 flex items-center justify-center text-sm text-gray-500">
+                  {errorMsg}
+                </div>
+              ) : (
+                <PriceLineChart
+                  data={candles}
+                  title=""
+                  onPriceSelect={(price) => setSelectedPrice(price)}
+                />
+              )}
+            </div>
+
+            <div className="mt-3 text-sm text-gray-500">점을 클릭하면 지정가로 선택돼요.</div>
+          </div>
+
+          {/* 요약 */}
+          <div className="rounded-3xl border border-gray-200 bg-white p-5">
+            <div className="text-sm font-semibold text-gray-900 mb-3">요약</div>
+
+            <div className="grid grid-cols-2 gap-4 md:grid-cols-4">
+              <SummaryItem label="시가" value={fmt(summary.open)} />
+              <SummaryItem label="고가" value={fmt(summary.high)} />
+              <SummaryItem label="저가" value={fmt(summary.low)} />
+              <SummaryItem label="전일 종가" value={fmt(summary.previousClose)} />
+            </div>
+          </div>
+        </div>
+
+        {/* 오른쪽 */}
+        <div>
           <OrderPanel
             symbol={symbol}
             currentPrice={currentPrice}
@@ -441,7 +438,8 @@ export default function Market() {
         confirmLoading={confirmLoading}
       />
 
-      {toast && (
+  {/* (기존: Market 로컬 LoginRequiredModal → 이제 App.tsx 전역 LoginRequiredModal로 통합) */}
+    {toast && (
         <div className="fixed inset-0 z-[60] pointer-events-none flex items-center justify-center">
           <div className="rounded-2xl bg-gray-900/90 text-white px-6 py-4 shadow-xl text-center">
             <div className="text-sm font-semibold">{toast.title}</div>
@@ -449,7 +447,9 @@ export default function Market() {
           </div>
         </div>
       )}
+     
     </div>
+    
   );
 }
 

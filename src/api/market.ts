@@ -23,14 +23,14 @@ export type Quote = {
 };
 
 export async function fetchDailyCandles(symbol: string): Promise<DailyCandle[]> {
-  const res = await api.get<DailyCandle[]>("/market/candles/daily", {
+  const res = await api.get<DailyCandle[]>("/api/market/candles/daily", {
     params: { symbol },
   });
   return res.data;
 }
 
 export async function fetchQuote(symbol: string): Promise<Quote> {
-  const res = await api.get<Quote>("/market/price", {
+  const res = await api.get<Quote>("/api/market/price", {
     params: { symbol },
   });
   return res.data;
