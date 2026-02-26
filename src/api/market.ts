@@ -22,9 +22,9 @@ export type Quote = {
   volume: number;
 };
 
-export async function fetchDailyCandles(symbol: string): Promise<DailyCandle[]> {
+export async function fetchDailyCandles(symbol: string, days = 90): Promise<DailyCandle[]> {
   const res = await api.get<DailyCandle[]>("/api/market/candles/daily", {
-    params: { symbol },
+    params: { symbol, days },
   });
   return res.data;
 }
