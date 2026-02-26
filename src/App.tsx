@@ -16,6 +16,7 @@ import { useAuthStore } from "./store/authStore";
 import ProtectedRoute from "./routes/ProtectedRoute";
 import MyPage from "./pages/MyPage";
 import Portfolio from "./pages/Portfolio";
+import PortfolioDetail from "./pages/PortfolioDetail";
 
 function AppRoutes() {
   const navigate = useNavigate();
@@ -63,7 +64,8 @@ return (
   <Route element={<ProtectedRoute />}>
     <Route path="/mypage" element={<MyPage />} />
     <Route path="/portfolio" element={<Portfolio />} />
-    {/* 여기 계속 추가하면 됨 */}
+      <Route path="/portfolio/:symbol" element={<PortfolioDetail />} />
+    
   </Route>
 </Routes>
 

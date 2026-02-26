@@ -11,6 +11,7 @@ import {
 import MiniSparkline from "../components/./market/MiniSparkline";
 import { safeSparkline } from "../utils/sparklineFallback";
 import { SkeletonHScroll } from "../components/skeleton/SkeletonCard";
+import { getPortfolio, type PortfolioResponse } from "../api/portfolio";
 
 function fmtNumber(v: number, digits = 2) {
   return Number.isFinite(v)
@@ -55,6 +56,49 @@ export default function Home() {
 
   const isLoggedIn = !!accessToken;
 
+
+const [pf, setPf] = useState<PortfolioResponse | null>(null);
+const [pfLoading, setPfLoading] = useState(false);
+const [pfError, setPfError] = useState<string | null>(null);
+
+
+// ✅ 로그인 상태에서만 포트폴리오 요약 1번 호출
+useEffect(() => {
+  if (!isLoggedIn) {
+    // 로그아웃 상태로 바뀌면 요약 초기화
+    setPf(null);
+    setPfError(null);
+    setPfLoading(false);
+    return;
+  }
+
+  const run = async () => {
+    setPfLoading(true);
+    setPfError(null);
+    try {
+      const data = await getPortfolio();
+      setPf(data);
+    } catch (e: any) {
+      setPfError("포트폴리오 요약을 불러오지 못했습니다.");
+      setPf(null);
+    } finally {
+      setPfLoading(false);
+    }
+  };
+
+  run();
+}, [isLoggedIn]);
+
+// ✅ 숫자 유틸 (BigDecimal string -> number 안전 변환)
+const num = (v: any) => {
+  const x = Number(v);
+  return Number.isFinite(x) ? x : 0;
+};
+
+
+
+
+
   useEffect(() => {
     if (isLoggedIn && !user && !isMeLoading) fetchMe();
   }, [isLoggedIn, user, isMeLoading, fetchMe]);
@@ -84,7 +128,7 @@ export default function Home() {
     run();
   }, []);
 
-  // 🔽 추가:
+  //  추가:
   // 홈에서 받은 recommendationVersion 기준으로
   // /api/home/recommendations 를 별도로 호출하여
   // 더보기 화면과 동일한 추천 데이터를 사용
@@ -171,46 +215,141 @@ export default function Home() {
           </div>
         )}
 
-        <section className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
-          {!isLoggedIn ? (
-            <div className="flex items-start justify-between gap-4">
-              <div className="space-y-2">
-                <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                  내 자산
-                </div>
-                <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                  로그인하면 내 포트폴리오를 한 번에 볼 수 있어요.
-                </div>
-                <div className="text-sm text-gray-500 dark:text-gray-400">
-                  보유 종목, 수익률, 자산 구성을 바로 확인할 수 있어요.
-                </div>
-              </div>
+ {/** ✅ 내 자산 섹션 (교체본) */}
+<section className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-white dark:bg-gray-900 p-6">
+  {!isLoggedIn ? (
+    // 비로그인
+    <div className="flex items-start justify-between gap-4">
+      <div className="space-y-2">
+        <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+          내 자산
+        </div>
+        <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
+          로그인하면 내 포트폴리오를 한 번에 볼 수 있어요.
+        </div>
+        <div className="text-sm text-gray-500 dark:text-gray-400">
+          보유 종목, 손익, 자산 요약을 빠르게 확인할 수 있어요.
+        </div>
+      </div>
 
-              <button
-                onClick={() => navigate("/login")}
-                className="shrink-0 rounded-2xl px-4 py-3 text-sm font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900"
-              >
-                로그인 하고 내 자산 확인하기
-              </button>
-            </div>
-          ) : (
-            <div className="space-y-2">
-              <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
-                내 자산
-              </div>
+      <button
+        onClick={() => navigate("/login")}
+        className="shrink-0 rounded-2xl px-4 py-3 text-sm font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+      >
+        로그인
+      </button>
+    </div>
+  ) : (
+    // 로그인
+    <div className="space-y-3">
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <div className="text-sm font-semibold text-gray-900 dark:text-gray-100">
+            내 자산
+          </div>
+          <div className="mt-1 text-sm text-gray-500 dark:text-gray-400">
+            {isMeLoading ? "불러오는 중..." : `${user?.nickname ?? "사용자"}님`}
+          </div>
+        </div>
 
-              <div className="text-lg font-semibold text-gray-900 dark:text-gray-100">
-                {isMeLoading
-                  ? "불러오는 중..."
-                  : `${user?.nickname ?? "사용자"}님, 안녕하세요`}
-              </div>
+        <button
+          onClick={() => navigate("/portfolio")}
+          className="rounded-2xl px-4 py-2 text-sm font-semibold bg-gray-900 text-white dark:bg-white dark:text-gray-900"
+        >
+          자세히 보기
+        </button>
+      </div>
 
-              <div className="text-sm text-gray-500 dark:text-gray-400">
-                오늘도 좋은 투자 되세요.
+      {/* 로딩/에러 */}
+      {pfLoading && (
+        <div className="text-sm text-gray-600 dark:text-gray-300">
+          포트폴리오 요약 불러오는 중...
+        </div>
+      )}
+      {!pfLoading && pfError && (
+        <div className="text-sm text-rose-600 dark:text-rose-300">{pfError}</div>
+      )}
+
+      {/* 요약 카드 */}
+      {!pfLoading && !pfError && pf && (
+        <div className="rounded-3xl border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-950 p-5">
+          {(() => {
+            const s = pf.summary;
+
+            // ✅ KRW 값이 있으면 KRW 우선, 없으면 USD로 표시
+            const hasKrw = s.totalMarketValueKrw != null && s.totalPnlKrw != null;
+
+            const totalValue = hasKrw ? num(s.totalMarketValueKrw) : num(s.totalMarketValueUsd);
+            const totalPnl = hasKrw ? num(s.totalPnlKrw) : num(s.totalPnlUsd);
+            const returnPct = num(s.totalReturnPct);
+            const positionsCnt = pf.positions?.length ?? 0;
+
+            const up = totalPnl >= 0;
+            const pnlColor = up ? "text-rose-600 dark:text-rose-300" : "text-blue-600 dark:text-blue-300";
+            const unit = hasKrw ? "원" : "USD";
+
+            return (
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    총 평가금액
+                  </div>
+                  <div className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    {fmtNumber(totalValue, 0)} {unit}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    총 손익 · 수익률
+                  </div>
+                  <div className={`text-xl font-bold ${pnlColor}`}>
+                    {totalPnl > 0 ? "+" : ""}
+                    {fmtNumber(totalPnl, 0)} {unit}
+                  </div>
+                  <div className={`text-xs font-semibold ${pnlColor}`}>
+                    {fmtSignedPercent(returnPct, 2)}
+                  </div>
+                </div>
+
+                <div className="space-y-1">
+                  <div className="text-xs font-medium text-gray-500 dark:text-gray-400">
+                    보유 종목
+                  </div>
+                  <div className="text-xl font-bold text-gray-900 dark:text-gray-100">
+                    {positionsCnt}개
+                  </div>
+
+                  {/* 환율 표시(있으면) */}
+                  {s.usdKrwRate && (
+                    <div className="text-xs text-gray-500 dark:text-gray-400">
+                      환율 {fmtNumber(num(s.usdKrwRate), 2)}
+                    </div>
+                  )}
+                </div>
               </div>
+            );
+          })()}
+
+          {/* 경고 뱃지 */}
+          {pf.warnings?.length > 0 && (
+            <div className="mt-4 flex flex-wrap gap-2">
+              {pf.warnings.slice(0, 3).map((w, i) => (
+                <span
+                  key={`${w.code}-${w.symbol ?? "all"}-${i}`}
+                  className="inline-flex items-center rounded-full bg-amber-100 text-amber-900 dark:bg-amber-900/30 dark:text-amber-200 px-3 py-1 text-xs font-semibold"
+                >
+                  {w.symbol ? `[${w.symbol}] ` : ""}
+                  {w.code}
+                </span>
+              ))}
             </div>
           )}
-        </section>
+        </div>
+      )}
+    </div>
+  )}
+</section>
 
         <section className="space-y-3">
           <div className="flex items-end justify-between">
