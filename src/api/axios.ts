@@ -15,6 +15,7 @@ const PUBLIC_AUTH_PATHS = [
   "/api/auth/oauth",
   "/api/auth/email",
   "/api/auth/resend-verification-email",
+  "/auth/check-email",
   "/api/home",
 ];
 

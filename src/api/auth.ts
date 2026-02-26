@@ -16,7 +16,7 @@ export type SignUpRequest = {
  * - 응답은 보통 string 메시지 ("이메일 인증 메일을 확인해주세요")
  */
 export async function signup(payload: SignUpRequest) {
-  const res = await api.post("/auth/signup", payload);
+  const res = await api.post("/api/auth/signup", payload);
   return res.data;
 }
 
@@ -27,7 +27,7 @@ export async function signup(payload: SignUpRequest) {
  * - res: { available: boolean }
  */
 export async function checkEmail(email: string) {
-  const res = await api.post("/auth/check-email", { email });
+  const res = await api.post("/api/auth/check-email", { email });
   return res.data as { available: boolean };
 }
 
@@ -37,7 +37,7 @@ export async function checkEmail(email: string) {
  * - 이 함수 내부에서 자동으로 생성/주입
  */
 export async function login(email: string, password: string) {
-  const res = await api.post("/auth/login", {
+  const res = await api.post("/api/auth/login", {
     email,
     password,
     deviceInfo: getDeviceInfo(), // ✅ 여기서 자동으로 deviceId + deviceType 생성
@@ -60,7 +60,7 @@ export async function login(email: string, password: string) {
  */
 export async function logout() {
   try {
-    await api.post("/auth/logout");
+    await api.post("/api/auth/logout");
   } finally {
     useAuthStore.getState().logout();
   }
