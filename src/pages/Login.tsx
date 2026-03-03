@@ -100,7 +100,7 @@ navigate(from, { replace: true });
               value={email}
               onChange={(e) => setEmail(e.target.value)}
               className="w-full border rounded-md px-3 py-2 focus:ring focus:ring-blue-200 outline-none"
-              placeholder="example@gmail.com"
+              placeholder="테스트용 아이디 : test@test.com"
               required
               disabled={loading}
             />
@@ -113,7 +113,7 @@ navigate(from, { replace: true });
               value={password}
               onChange={(e) => setPassword(e.target.value)}
               className="w-full border rounded-md px-3 py-2 focus:ring focus:ring-blue-200 outline-none"
-              placeholder="••••••••"
+              placeholder="테스트용 비번 : test1234567"
               required
               disabled={loading}
             />
