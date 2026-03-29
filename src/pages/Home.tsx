@@ -49,12 +49,12 @@ function timeAgo(datetime: number) {
 export default function Home() {
   const navigate = useNavigate();
 
-  const accessToken = useAuthStore((s) => s.accessToken);
-  const user = useAuthStore((s) => s.user);
-  const isMeLoading = useAuthStore((s) => s.isMeLoading);
-  const fetchMe = useAuthStore((s) => s.fetchMe);
+const accessToken = useAuthStore((s) => s.accessToken);
+const user = useAuthStore((s) => s.user);
+const isMeLoading = useAuthStore((s) => s.isMeLoading);
+const fetchMe = useAuthStore((s) => s.fetchMe);
 
-  const isLoggedIn = !!accessToken;
+const isLoggedIn = !!user;
 
 
 const [pf, setPf] = useState<PortfolioResponse | null>(null);
@@ -98,10 +98,11 @@ const num = (v: any) => {
 
 
 
-
-  useEffect(() => {
-    if (isLoggedIn && !user && !isMeLoading) fetchMe();
-  }, [isLoggedIn, user, isMeLoading, fetchMe]);
+useEffect(() => {
+  if (accessToken && !user && !isMeLoading) {
+    fetchMe().catch(() => {});
+  }
+}, [accessToken, user, isMeLoading, fetchMe]);
 
   const [home, setHome] = useState<HomeResponse | null>(null);
   const [homeLoading, setHomeLoading] = useState(false);
