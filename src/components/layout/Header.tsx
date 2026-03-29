@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo ,useRef  } from "react";
+import { useState, useEffect, useMemo, useRef } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuthStore } from "../../store/authStore";
 import { logout as logoutApi } from "../../api/auth";
@@ -14,8 +14,6 @@ function NavLink({
 }) {
   const { pathname } = useLocation();
   const active = pathname === to;
-  
-
 
   return (
     <Link
@@ -39,16 +37,16 @@ export default function Header() {
 
   const [darkMode, setDarkMode] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
-
-  // ✅ 토스형 검색: 헤더 입력값
   const [query, setQuery] = useState("");
 
   const accessToken = useAuthStore((s) => s.accessToken);
   const user = useAuthStore((s) => s.user);
   const isMeLoading = useAuthStore((s) => s.isMeLoading);
   const fetchMe = useAuthStore((s) => s.fetchMe);
+  const logoutStore = useAuthStore((s) => s.logout);
 
-  const isLoggedIn = !!accessToken;
+  // 로그인 여부는 토큰 존재가 아니라 user 검증 기준
+  const isLoggedIn = !!user;
 
   const isKakaoUser = useMemo(() => {
     const p = (user?.provider ?? "").toLowerCase();
@@ -59,30 +57,33 @@ export default function Header() {
     if (darkMode) document.documentElement.classList.add("dark");
     else document.documentElement.classList.remove("dark");
   }, [darkMode]);
+
   const triedMeRef = useRef(false);
-useEffect(() => {
-  // 로그아웃 상태면 리셋
-  if (!isLoggedIn) {
-    triedMeRef.current = false;
-    return;
-  }
 
-  // 이미 시도했으면 다시 안 함 (401이어도 재시도 X)
-  if (triedMeRef.current) return;
+  useEffect(() => {
+    // accessToken 자체가 없으면 시도 플래그 초기화
+    if (!accessToken) {
+      triedMeRef.current = false;
+      return;
+    }
 
-  if (!user && !isMeLoading) {
-    triedMeRef.current = true;
-    fetchMe().catch(() => {
-      // 실패해도 반복 호출 막기
-      // 필요하면 여기서 logout 처리
-    });
-  }
-}, [isLoggedIn, user, isMeLoading, fetchMe]);
+    // 이미 시도했으면 중복 호출 방지
+    if (triedMeRef.current) return;
+
+    if (!user && !isMeLoading) {
+      triedMeRef.current = true;
+      fetchMe().catch(() => {
+        // authStore.fetchMe 안에서 정리
+      });
+    }
+  }, [accessToken, user, isMeLoading, fetchMe]);
 
   const handleLogout = async () => {
     try {
       await logoutApi();
     } finally {
+      // 백엔드 logout 실패해도 프론트 상태는 무조건 정리
+      logoutStore();
       setMobileOpen(false);
       navigate("/");
     }
@@ -92,6 +93,7 @@ useEffect(() => {
     try {
       await logoutApi();
     } finally {
+      logoutStore();
       setMobileOpen(false);
       window.location.href = "/api/auth/oauth/kakao/logout";
     }
@@ -99,24 +101,22 @@ useEffect(() => {
 
   const submitSearch = () => {
     const s = query.trim().toUpperCase();
-    // 검색어 비어있으면 마켓으로만 이동
+
     if (!s) {
       navigate("/market");
-      setQuery("");   
+      setQuery("");
       setMobileOpen(false);
       return;
     }
+
     navigate(`/market?symbol=${encodeURIComponent(s)}`);
-     setQuery(""); 
+    setQuery("");
     setMobileOpen(false);
   };
 
   return (
     <header className="sticky top-0 z-[999] border-b bg-white/90 backdrop-blur dark:bg-gray-950/80 dark:border-gray-800">
       <div className="mx-auto max-w-7xl px-4 h-14 flex items-center justify-between">
-        {/* =======================
-            좌측: 로고 + 메뉴 (왼쪽 정렬)
-        ======================= */}
         <div className="flex items-center gap-6">
           <Link
             to="/"
@@ -126,7 +126,6 @@ useEffect(() => {
             Stock Dashboard
           </Link>
 
-          {/* 데스크탑 메뉴 */}
           <nav className="hidden md:flex items-center gap-1">
             <NavLink to="/" label="홈" />
             <NavLink to="/market" label="마켓" />
@@ -134,13 +133,8 @@ useEffect(() => {
           </nav>
         </div>
 
-        {/* =======================
-            우측: 검색 + 로그인/로그아웃 (토스 스타일)
-        ======================= */}
         <div className="hidden md:flex items-center gap-2">
-          {/* 검색 입력 (작고 둥글게) */}
           <div className="h-9 w-[260px] rounded-full border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-3 flex items-center gap-2">
-        
             <input
               value={query}
               onChange={(e) => setQuery(e.target.value)}
@@ -154,7 +148,6 @@ useEffect(() => {
             />
           </div>
 
-          {/* 버튼 영역 */}
           {!isLoggedIn ? (
             <Link
               to="/login"
@@ -187,7 +180,6 @@ useEffect(() => {
           )}
         </div>
 
-        {/* 모바일 햄버거 */}
         <button
           onClick={() => setMobileOpen((v) => !v)}
           className="md:hidden h-9 w-9 rounded-full hover:bg-gray-100 dark:hover:bg-gray-800 grid place-items-center"
@@ -197,12 +189,8 @@ useEffect(() => {
         </button>
       </div>
 
-      {/* =======================
-          모바일 메뉴
-      ======================= */}
       {mobileOpen && (
         <div className="md:hidden border-t dark:border-gray-800 bg-white dark:bg-gray-950 px-4 py-3 space-y-3">
-          {/* 모바일 검색 */}
           <div className="h-10 rounded-full border border-gray-200 dark:border-gray-800 bg-gray-50 dark:bg-gray-900 px-3 flex items-center gap-2">
             <span className="text-gray-400 select-none">🔍</span>
             <input
@@ -218,7 +206,6 @@ useEffect(() => {
             />
           </div>
 
-          {/* 모바일 메뉴 */}
           <div className="flex gap-1">
             <NavLink to="/" label="홈" onClick={() => setMobileOpen(false)} />
             <NavLink to="/market" label="마켓" onClick={() => setMobileOpen(false)} />
@@ -229,7 +216,6 @@ useEffect(() => {
             />
           </div>
 
-          {/* 모바일 로그인/로그아웃 */}
           {!isLoggedIn ? (
             <Link
               to="/login"
@@ -259,7 +245,6 @@ useEffect(() => {
             </div>
           )}
 
-          {/* (선택) 모바일에서 검색 버튼 없애고 엔터로만 검색해도 됨 */}
           <button
             onClick={submitSearch}
             className="w-full h-10 rounded-full border border-gray-200 hover:bg-gray-50 text-sm font-semibold
